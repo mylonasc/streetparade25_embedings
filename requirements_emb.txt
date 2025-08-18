@@ -1,0 +1,6 @@
+transformers
+datasets
+matplotlib
+pydub
+torchcodec
+torch
