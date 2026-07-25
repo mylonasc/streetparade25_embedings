@@ -31,6 +31,13 @@ SoundCloud Utilities
    :members:
    :undoc-members:
 
+YouTube Utilities
+-----------------
+
+.. automodule:: streetparade_embeddings.youtube
+   :members:
+   :undoc-members:
+
 Embedding Model
 ---------------
 

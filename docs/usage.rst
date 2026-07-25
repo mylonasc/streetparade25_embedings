@@ -44,6 +44,31 @@ Override the artist cache bucket if needed:
      --track-url "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul" \
      --artist "Hilit Kolet"
 
+Download One YouTube Video As MP3
+---------------------------------
+
+Pass a YouTube video URL. The channel or artist metadata is inferred with ``yt-dlp``:
+
+.. code-block:: bash
+
+   streetparade-embeddings --data-dir . youtube-download \
+     --url "https://www.youtube.com/watch?v=1Hx3PGeADmc"
+
+The YouTube downloader is also available as a standalone module:
+
+.. code-block:: bash
+
+   python -m streetparade_embeddings.youtube \
+     "https://www.youtube.com/watch?v=1Hx3PGeADmc"
+
+Override the cache bucket if needed:
+
+.. code-block:: bash
+
+   streetparade-embeddings --data-dir . youtube-download \
+     --url "https://www.youtube.com/watch?v=1Hx3PGeADmc" \
+     --artist "Artist Name"
+
 Discover Tracks From Saved Street Parade HTML
 ---------------------------------------------
 

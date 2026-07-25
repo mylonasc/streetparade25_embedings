@@ -8,6 +8,7 @@ from .pipeline import (
     compute_artist_embeddings,
     download_artist_tracks,
     download_single_track,
+    download_youtube_track,
     save_embedding_results,
     write_soundcloud_artist_links,
 )
@@ -57,6 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     download_parser.add_argument("--num-links", type=int)
     download_parser.add_argument("--track-url", help="Download one SoundCloud track URL instead of reading artist_links.json")
     download_parser.add_argument("--artist", help="Optional cache bucket name for --track-url downloads")
+    youtube_parser = subparsers.add_parser("youtube-download", help="Download one YouTube video as a cached MP3")
+    youtube_parser.add_argument("--url", required=True, help="YouTube video URL")
+    youtube_parser.add_argument("--artist", help="Optional cache bucket name; defaults to inferred channel/artist metadata")
     subparsers.add_parser("embed", help="Compute artist embeddings from downloaded tracks")
     subparsers.add_parser("run-all", help="Download listed tracks and compute embeddings")
 
@@ -80,6 +84,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{status}: {result.path}")
         else:
             download_artist_tracks(config, num_links=args.num_links)
+        return 0
+    if args.command == "youtube-download":
+        result = download_youtube_track(config, args.url, artist=args.artist)
+        status = "downloaded" if result.downloaded else "already cached"
+        print(f"{status}: {result.path}")
+        print(f"artist: {result.artist}")
+        print(f"title: {result.title}")
         return 0
     if args.command == "embed":
         results = compute_artist_embeddings(config)

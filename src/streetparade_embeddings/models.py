@@ -23,6 +23,16 @@ class TrackDownload:
 
 
 @dataclass(frozen=True)
+class MediaDownload:
+    source: str
+    artist: str
+    title: str
+    url: str
+    path: Path
+    downloaded: bool
+
+
+@dataclass(frozen=True)
 class ArtistEmbeddingResult:
     artist: str
     embedding: np.ndarray | None

@@ -57,6 +57,25 @@ Download one direct track URL:
    streetparade-embeddings --data-dir . download \
      --track-url "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul"
 
+``youtube-download``
+--------------------
+
+Download one YouTube video as a cached MP3:
+
+.. code-block:: bash
+
+   streetparade-embeddings --data-dir . youtube-download \
+     --url "https://www.youtube.com/watch?v=1Hx3PGeADmc"
+
+The file is stored under ``.songs_cache/youtube/<artist_hash>/<url_hash>.mp3``.
+
+The same downloader can be invoked as a focused module:
+
+.. code-block:: bash
+
+   python -m streetparade_embeddings.youtube \
+     "https://www.youtube.com/watch?v=1Hx3PGeADmc"
+
 ``embed``
 ---------
 

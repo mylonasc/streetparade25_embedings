@@ -8,8 +8,10 @@ import numpy as np
 from .config import PipelineConfig
 from .embeddings import ClapEmbeddingModel, aggregate_embeddings
 from .models import ArtistEmbeddingResult
+from .models import MediaDownload
 from .models import TrackDownload
 from .soundcloud import ArtistData, download_track_to_cache, load_artist_links, save_artist_links
+from .youtube import download_youtube_to_cache
 
 
 def compute_artist_embedding(
@@ -88,6 +90,10 @@ def download_artist_tracks(config: PipelineConfig, num_links: int | None = None)
 
 def download_single_track(config: PipelineConfig, track_url: str, artist: str | None = None) -> TrackDownload:
     return download_track_to_cache(track_url, config.resolved_cache_dir, artist=artist)
+
+
+def download_youtube_track(config: PipelineConfig, video_url: str, artist: str | None = None) -> MediaDownload:
+    return download_youtube_to_cache(video_url, config.resolved_cache_dir, artist=artist)
 
 
 def write_soundcloud_artist_links(config: PipelineConfig) -> dict[str, list[str]]:
