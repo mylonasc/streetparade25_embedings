@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "streetparade-embeddings"
+version = "0.1.0"
+description = "SoundCloud download and CLAP embedding pipeline for Street Parade research analysis."
+requires-python = ">=3.10"
+dependencies = [
+  "beautifulsoup4",
+  "numpy",
+  "pydub",
+  "soundcloud-lib",
+  "torch",
+  "transformers",
+  "yt-dlp",
+]
+
+[project.optional-dependencies]
+discovery = [
+  "lxml_html_clean",
+  "requests-html",
+]
+notebooks = [
+  "datasets",
+  "matplotlib",
+  "tqdm",
+]
+dev = [
+  "pytest",
+]
+docs = [
+  "myst-parser",
+  "sphinx",
+  "sphinx-autodoc-typehints",
+]
+
+[project.scripts]
+streetparade-embeddings = "streetparade_embeddings.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

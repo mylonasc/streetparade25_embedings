@@ -1,6 +1,13 @@
+beautifulsoup4
 transformers
 datasets
 matplotlib
 pydub
+soundcloud-lib
+sphinx
+sphinx-autodoc-typehints
 torchcodec
 torch
+tqdm
+yt-dlp
+myst-parser

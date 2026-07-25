@@ -1,0 +1,7 @@
+.venv/
+.songs_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+outputs/
+docs/_build/
