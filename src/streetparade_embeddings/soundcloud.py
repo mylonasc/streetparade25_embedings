@@ -3,10 +3,26 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from enum import Enum
 from pathlib import Path
 from urllib.parse import urljoin
 
 from .models import Artist, TrackDownload
+
+
+class DiscoveryMethod(str, Enum):
+    REQUESTS_HTML = "requests-html"
+    YT_DLP = "yt-dlp"
+
+    @classmethod
+    def from_value(cls, value: "DiscoveryMethod | str") -> "DiscoveryMethod":
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls(value)
+        except ValueError as exc:
+            allowed = ", ".join(method.value for method in cls)
+            raise ValueError(f"discovery method must be one of: {allowed}") from exc
 
 
 def stable_hash(value: str) -> str:
@@ -51,8 +67,46 @@ def parse_artists_from_html(html_file: str | Path) -> list[Artist]:
     return artists
 
 
-async def discover_track_urls(soundcloud_url: str, sleep_seconds: int = 15, timeout: int = 40) -> list[str]:
-    """Render a SoundCloud tracks page and return discovered track URLs."""
+class SoundCloudTrackDiscoverer:
+    """Discover SoundCloud track URLs using a selectable backend."""
+
+    def __init__(
+        self,
+        method: DiscoveryMethod | str = DiscoveryMethod.REQUESTS_HTML,
+        sleep_seconds: int = 15,
+        timeout: int = 40,
+    ):
+        self.method = DiscoveryMethod.from_value(method)
+        self.sleep_seconds = sleep_seconds
+        self.timeout = timeout
+
+    def discover(self, soundcloud_url: str) -> list[str]:
+        if self.method is DiscoveryMethod.YT_DLP:
+            return discover_track_urls_ytdlp(soundcloud_url)
+        return asyncio.run(
+            discover_track_urls_requests_html(
+                soundcloud_url,
+                sleep_seconds=self.sleep_seconds,
+                timeout=self.timeout,
+            )
+        )
+
+    async def discover_async(self, soundcloud_url: str) -> list[str]:
+        if self.method is DiscoveryMethod.YT_DLP:
+            return discover_track_urls_ytdlp(soundcloud_url)
+        return await discover_track_urls_requests_html(
+            soundcloud_url,
+            sleep_seconds=self.sleep_seconds,
+            timeout=self.timeout,
+        )
+
+
+async def discover_track_urls_requests_html(
+    soundcloud_url: str,
+    sleep_seconds: int = 15,
+    timeout: int = 40,
+) -> list[str]:
+    """Render a SoundCloud tracks page with requests-html and return discovered track URLs."""
 
     try:
         from requests_html import AsyncHTMLSession
@@ -70,8 +124,51 @@ async def discover_track_urls(soundcloud_url: str, sleep_seconds: int = 15, time
         await session.close()
 
 
-def discover_track_urls_sync(soundcloud_url: str, sleep_seconds: int = 15, timeout: int = 40) -> list[str]:
-    return asyncio.run(discover_track_urls(soundcloud_url, sleep_seconds=sleep_seconds, timeout=timeout))
+async def discover_track_urls(soundcloud_url: str, sleep_seconds: int = 15, timeout: int = 40) -> list[str]:
+    """Compatibility wrapper for requests-html SoundCloud track discovery."""
+
+    return await discover_track_urls_requests_html(soundcloud_url, sleep_seconds=sleep_seconds, timeout=timeout)
+
+
+def discover_track_urls_ytdlp(soundcloud_url: str) -> list[str]:
+    """Use yt-dlp flat extraction to discover tracks for a SoundCloud URL."""
+
+    try:
+        from yt_dlp import YoutubeDL
+    except ImportError as exc:
+        raise RuntimeError("yt-dlp SoundCloud discovery requires yt-dlp") from exc
+
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+        "noplaylist": False,
+        "skip_download": True,
+        "cachedir": False,
+    }
+    with YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(soundcloud_url, download=False)
+
+    entries = info.get("entries") or []
+    urls = [_entry_track_url(entry) for entry in entries if entry]
+    return [url for url in urls if url]
+
+
+def discover_track_urls_sync(
+    soundcloud_url: str,
+    sleep_seconds: int = 15,
+    timeout: int = 40,
+    method: DiscoveryMethod | str = DiscoveryMethod.REQUESTS_HTML,
+) -> list[str]:
+    discoverer = SoundCloudTrackDiscoverer(method=method, sleep_seconds=sleep_seconds, timeout=timeout)
+    return discoverer.discover(soundcloud_url)
+
+
+def _entry_track_url(entry: dict) -> str | None:
+    url = entry.get("webpage_url") or entry.get("url")
+    if isinstance(url, str) and url.startswith("http"):
+        return url
+    return None
 
 
 def load_artist_links(path: str | Path) -> dict[str, list[str]]:

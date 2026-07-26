@@ -72,13 +72,38 @@ Override the cache bucket if needed:
 Discover Tracks From Saved Street Parade HTML
 ---------------------------------------------
 
-When ``streetparade_data.html`` is available locally, discover track URLs for artists with SoundCloud pages:
+When ``streetparade_data.html`` is available locally, discover track URLs for artists with SoundCloud pages. Use ``yt-dlp`` for the non-browser backend:
 
 .. code-block:: bash
 
-   streetparade-embeddings --data-dir . discover-tracks
+   streetparade-embeddings --data-dir . discover-tracks --method yt-dlp
+
+The legacy rendered-page backend is still available:
+
+.. code-block:: bash
+
+   streetparade-embeddings --data-dir . discover-tracks --method requests-html
 
 This writes ``artist_links.json`` under ``--data-dir`` unless ``--links-file`` points elsewhere.
+
+Select A SoundCloud Discovery Backend In Python
+-----------------------------------------------
+
+Instantiate a discoverer with the backend you want to use:
+
+.. code-block:: python
+
+   from streetparade_embeddings.soundcloud import DiscoveryMethod, SoundCloudTrackDiscoverer
+
+   discoverer = SoundCloudTrackDiscoverer(method=DiscoveryMethod.YT_DLP)
+   track_urls = discoverer.discover("https://soundcloud.com/hilitkolet")
+
+The original rendered-page method is also selectable:
+
+.. code-block:: python
+
+   discoverer = SoundCloudTrackDiscoverer(method=DiscoveryMethod.REQUESTS_HTML)
+   track_urls = discoverer.discover("https://soundcloud.com/hilitkolet")
 
 Compute Embeddings
 ------------------
@@ -120,11 +145,11 @@ Python API Example
 
 .. code-block:: python
 
-   from streetparade_embeddings.config import PipelineConfig
+   from streetparade_embeddings.config import Device, PipelineConfig
    from streetparade_embeddings.pipeline import download_single_track
    from pathlib import Path
 
-   config = PipelineConfig(data_dir=Path("."))
+   config = PipelineConfig(data_dir=Path("."), device=Device.AUTO)
    result = download_single_track(
        config,
        "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul",

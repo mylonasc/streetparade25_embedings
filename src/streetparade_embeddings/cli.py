@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .config import PipelineConfig
+from .config import Device, PipelineConfig
 from .pipeline import (
     compute_artist_embeddings,
     download_artist_tracks,
@@ -13,6 +13,7 @@ from .pipeline import (
     write_soundcloud_artist_links,
 )
 from .soundcloud import parse_artists_from_html, save_artist_links
+from .soundcloud import DiscoveryMethod
 
 
 def build_config(args: argparse.Namespace) -> PipelineConfig:
@@ -23,7 +24,7 @@ def build_config(args: argparse.Namespace) -> PipelineConfig:
         html_file=Path(args.html_file),
         output_dir=Path(args.output_dir),
         model_name=args.model_name,
-        device=args.device,
+        device=Device.from_value(args.device),
         sampling_rate=args.sampling_rate,
         chunk_seconds=args.chunk_seconds,
         chunk_stride_seconds=args.chunk_stride_seconds,
@@ -53,7 +54,13 @@ def main(argv: list[str] | None = None) -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("parse-artists", help="Parse the local Street Parade HTML and write SoundCloud artist URLs")
-    subparsers.add_parser("discover-tracks", help="Discover SoundCloud track URLs and write artist_links.json")
+    discover_parser = subparsers.add_parser("discover-tracks", help="Discover SoundCloud track URLs and write artist_links.json")
+    discover_parser.add_argument(
+        "--method",
+        default="requests-html",
+        choices=[method.value for method in DiscoveryMethod],
+        help="SoundCloud artist-page discovery backend",
+    )
     download_parser = subparsers.add_parser("download", help="Download tracks from artist_links.json or a direct track URL")
     download_parser.add_argument("--num-links", type=int)
     download_parser.add_argument("--track-url", help="Download one SoundCloud track URL instead of reading artist_links.json")
@@ -75,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.command == "discover-tracks":
-        write_soundcloud_artist_links(config)
+        write_soundcloud_artist_links(config, discovery_method=DiscoveryMethod.from_value(args.method))
         return 0
     if args.command == "download":
         if args.track_url:

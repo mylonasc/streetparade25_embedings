@@ -22,7 +22,7 @@ For documentation builds:
 
    pip install -e ".[docs]"
 
-For rendered SoundCloud artist-page discovery using ``requests-html``:
+SoundCloud artist-page discovery supports two backends. The ``yt-dlp`` backend is available in the base install. The legacy rendered-page backend requires ``requests-html``:
 
 .. code-block:: bash
 

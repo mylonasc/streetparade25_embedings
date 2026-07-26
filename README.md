@@ -8,7 +8,7 @@ Reusable pipeline for collecting SoundCloud tracks and computing artist-level CL
 pip install -e .
 ```
 
-For SoundCloud track discovery from rendered pages:
+For SoundCloud track discovery from rendered pages with the legacy `requests-html` backend:
 
 ```bash
 pip install -e '.[discovery]'
@@ -21,7 +21,7 @@ pip install -e '.[discovery]'
 Discover track URLs from `streetparade_data.html`:
 
 ```bash
-streetparade-embeddings --data-dir . discover-tracks
+streetparade-embeddings --data-dir . discover-tracks --method yt-dlp
 ```
 
 Download cached MP3s for URLs in `artist_links.json`:
@@ -48,6 +48,15 @@ The YouTube downloader can also be run as a standalone module:
 
 ```bash
 python -m streetparade_embeddings.youtube https://www.youtube.com/watch?v=1Hx3PGeADmc
+```
+
+In Python code, select SoundCloud artist-page discovery backends with the enum:
+
+```python
+from streetparade_embeddings.soundcloud import DiscoveryMethod, SoundCloudTrackDiscoverer
+
+discoverer = SoundCloudTrackDiscoverer(method=DiscoveryMethod.YT_DLP)
+track_urls = discoverer.discover("https://soundcloud.com/hilitkolet")
 ```
 
 Compute artist embeddings from downloaded tracks:

@@ -10,6 +10,8 @@ Configuration
    :members:
    :undoc-members:
 
+Use :class:`streetparade_embeddings.config.Device` instead of raw strings when constructing configs in Python code.
+
 Data Models
 -----------
 
@@ -30,6 +32,8 @@ SoundCloud Utilities
 .. automodule:: streetparade_embeddings.soundcloud
    :members:
    :undoc-members:
+
+Use :class:`streetparade_embeddings.soundcloud.DiscoveryMethod` to choose between the ``requests-html`` and ``yt-dlp`` discovery backends.
 
 YouTube Utilities
 -----------------

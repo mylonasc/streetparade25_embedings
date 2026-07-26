@@ -23,7 +23,7 @@ Pipeline Stages
    Save the Street Parade artist listing HTML as ``streetparade_data.html`` or prepare ``artist_links.json`` manually.
 
 2. Discover SoundCloud track URLs.
-   Use ``discover-tracks`` when starting from artist pages, or edit ``artist_links.json`` directly.
+   Use ``discover-tracks --method yt-dlp`` when starting from artist pages, use ``discover-tracks --method requests-html`` for the legacy browser-rendered backend, or edit ``artist_links.json`` directly.
 
 3. Download audio.
    Downloads are cached by stable hashes of artist name and track URL, so reruns skip existing files.

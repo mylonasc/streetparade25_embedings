@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .models import MediaDownload
+from .models import MediaDownload, MediaSource
 from .soundcloud import stable_hash
 
 
@@ -19,10 +19,10 @@ def download_youtube_to_cache(video_url: str, cache_dir: str | Path, artist: str
     title = info.get("title") or ""
     output_path = youtube_cache_path(cache_dir, inferred_artist, video_url)
     if output_path.exists():
-        return MediaDownload("youtube", inferred_artist, title, video_url, output_path, downloaded=False)
+        return MediaDownload(MediaSource.YOUTUBE, inferred_artist, title, video_url, output_path, downloaded=False)
 
     _download_with_ytdlp(video_url, output_path)
-    return MediaDownload("youtube", inferred_artist, title, video_url, output_path, downloaded=True)
+    return MediaDownload(MediaSource.YOUTUBE, inferred_artist, title, video_url, output_path, downloaded=True)
 
 
 def _extract_ytdlp_info(video_url: str) -> dict:

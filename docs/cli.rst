@@ -33,13 +33,25 @@ Parse the saved Street Parade HTML and write artist SoundCloud page URLs to ``ar
 ``discover-tracks``
 -------------------
 
-Render discovered SoundCloud artist pages and write track URLs to ``artist_links.json``:
+Discover SoundCloud artist-page tracks and write track URLs to ``artist_links.json``. The ``yt-dlp`` backend avoids browser rendering:
 
 .. code-block:: bash
 
-   streetparade-embeddings --data-dir . discover-tracks
+   streetparade-embeddings --data-dir . discover-tracks --method yt-dlp
 
-This command requires the optional ``discovery`` dependencies.
+The legacy rendered-page backend remains available and requires the optional ``discovery`` dependencies:
+
+.. code-block:: bash
+
+   streetparade-embeddings --data-dir . discover-tracks --method requests-html
+
+In Python code, prefer the enum rather than raw strings:
+
+.. code-block:: python
+
+   from streetparade_embeddings.soundcloud import DiscoveryMethod, SoundCloudTrackDiscoverer
+
+   discoverer = SoundCloudTrackDiscoverer(method=DiscoveryMethod.YT_DLP)
 
 ``download``
 ------------

@@ -6,11 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "streetparade-embeddings"
 version = "0.1.0"
 description = "SoundCloud download and CLAP embedding pipeline for Street Parade research analysis."
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 dependencies = [
   "beautifulsoup4",
+  "lxml[html-clean]>=6.1.1",
+  "nest-asyncio>=1.6.0",
   "numpy",
   "pydub",
+  "requests-html>=0.10.0",
   "soundcloud-lib",
   "torch",
   "transformers",

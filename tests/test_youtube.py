@@ -1,5 +1,5 @@
 from streetparade_embeddings.config import PipelineConfig
-from streetparade_embeddings.models import MediaDownload
+from streetparade_embeddings.models import MediaDownload, MediaSource
 from streetparade_embeddings.pipeline import download_youtube_track
 from streetparade_embeddings.soundcloud import stable_hash
 from streetparade_embeddings.youtube import youtube_cache_path
@@ -21,14 +21,14 @@ def test_download_youtube_track_uses_pipeline_cache(monkeypatch, tmp_path):
     def fake_download_youtube_to_cache(video_url, cache_dir, artist=None):
         calls.append((video_url, cache_dir, artist))
         path = cache_dir / "youtube" / stable_hash("Inferred Channel") / f"{stable_hash(video_url)}.mp3"
-        return MediaDownload("youtube", "Inferred Channel", "Example Title", video_url, path, True)
+        return MediaDownload(MediaSource.YOUTUBE, "Inferred Channel", "Example Title", video_url, path, True)
 
     monkeypatch.setattr("streetparade_embeddings.pipeline.download_youtube_to_cache", fake_download_youtube_to_cache)
 
     result = download_youtube_track(PipelineConfig(data_dir=tmp_path), url)
 
     assert calls == [(url, tmp_path / ".songs_cache", None)]
-    assert result.source == "youtube"
+    assert result.source is MediaSource.YOUTUBE
     assert result.artist == "Inferred Channel"
     assert result.title == "Example Title"
 
@@ -41,7 +41,7 @@ def test_youtube_module_main_prints_download_result(monkeypatch, tmp_path, capsy
         assert video_url == url
         assert cache_dir == str(tmp_path)
         assert artist == "Example Channel"
-        return MediaDownload("youtube", "Example Channel", "Example Title", video_url, path, False)
+        return MediaDownload(MediaSource.YOUTUBE, "Example Channel", "Example Title", video_url, path, False)
 
     monkeypatch.setattr("streetparade_embeddings.youtube.download_youtube_to_cache", fake_download_youtube_to_cache)
 

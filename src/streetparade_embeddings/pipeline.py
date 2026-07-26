@@ -11,6 +11,7 @@ from .models import ArtistEmbeddingResult
 from .models import MediaDownload
 from .models import TrackDownload
 from .soundcloud import ArtistData, download_track_to_cache, load_artist_links, save_artist_links
+from .soundcloud import DiscoveryMethod
 from .youtube import download_youtube_to_cache
 
 
@@ -96,13 +97,16 @@ def download_youtube_track(config: PipelineConfig, video_url: str, artist: str |
     return download_youtube_to_cache(video_url, config.resolved_cache_dir, artist=artist)
 
 
-def write_soundcloud_artist_links(config: PipelineConfig) -> dict[str, list[str]]:
+def write_soundcloud_artist_links(
+    config: PipelineConfig,
+    discovery_method: DiscoveryMethod | str = DiscoveryMethod.REQUESTS_HTML,
+) -> dict[str, list[str]]:
     from .soundcloud import discover_track_urls_sync, parse_artists_from_html
 
     artist_links: dict[str, list[str]] = {}
     for artist in parse_artists_from_html(config.resolved_html_file):
         if artist.soundcloud_url is None:
             continue
-        artist_links[artist.name] = discover_track_urls_sync(artist.soundcloud_url)
+        artist_links[artist.name] = discover_track_urls_sync(artist.soundcloud_url, method=discovery_method)
     save_artist_links(artist_links, config.resolved_links_file)
     return artist_links
