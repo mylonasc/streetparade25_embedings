@@ -32,10 +32,10 @@ class ClapEmbeddingModel:
 
         import torch
 
-        inputs = self.processor(audios=chunks, sampling_rate=sampling_rate, return_tensors="pt").to(self.device)
+        inputs = self.processor(audio=chunks, sampling_rate=sampling_rate, return_tensors="pt").to(self.device)
         with torch.no_grad():
             audio_embed = self.model.get_audio_features(**inputs)
-        return audio_embed.mean(0).cpu().numpy()
+        return audio_embed.pooler_output.mean(0).cpu().numpy()
 
     def embed_track(
         self,

@@ -67,6 +67,50 @@ streetparade-embeddings --data-dir . --device auto embed
 
 Outputs are written to `outputs/artist_embeddings.npz` and `outputs/artist_metadata.json` by default.
 
+## API Server
+
+Run the FastAPI server with SQLite metadata storage:
+
+```bash
+STREETPARADE_DB=streetparade_embeddings.sqlite3 uvicorn streetparade_embeddings.api:app --reload
+```
+
+Example flow:
+
+```bash
+curl -X POST http://127.0.0.1:8000/artists \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Hilit Kolet","links":["https://soundcloud.com/hilitkolet"],"images":[],"soundcloud_url":"https://soundcloud.com/hilitkolet","instagram":null,"youtube":null,"web":null}'
+
+curl -X POST http://127.0.0.1:8000/artists/1/download \
+  -H 'Content-Type: application/json' \
+  -d '{"max_tracks":5,"discovery_method":"yt-dlp"}'
+
+curl -X POST http://127.0.0.1:8000/artists/1/embeddings/compute \
+  -H 'Content-Type: application/json' \
+  -d '{"only_missing":true,"device":"auto"}'
+
+curl http://127.0.0.1:8000/embedding-jobs/<job-id>
+
+curl -X POST http://127.0.0.1:8000/embedding-jobs/<job-id>/cancel
+
+curl http://127.0.0.1:8000/artists/1/embeddings
+```
+
+Embedding compute requests are queued. The server owns one lazy CLAP model instance per model/device configuration and reuses it across queued jobs. Cancellation is cooperative: queued jobs are cancelled immediately, while running jobs stop between tracks.
+
+Useful endpoints:
+
+- `POST /artists`: create or update an artist using the package `Artist` metadata shape: `name`, `links`, `images`, `soundcloud_url`, `instagram`, `youtube`, and `web`.
+- `POST /artists/{artist_id}/download`: discover/download tracks and store chunk sample metadata.
+- `GET /artists/{artist_id}/tracks`: list stored tracks, paths, sample counts, and embedding status.
+- `POST /embeddings/compute`: enqueue missing per-track embeddings across all artists, or pass `artist_id`.
+- `GET /embedding-jobs`: list queued/running/completed/failed/cancelled embedding jobs.
+- `GET /embedding-jobs/{job_id}`: inspect one embedding job.
+- `POST /embedding-jobs/{job_id}/cancel`: cancel a queued job or request cancellation of a running job.
+- `GET /tracks/{track_id}/embedding`: retrieve one stored track embedding.
+- `GET /artists/{artist_id}/embeddings`: retrieve per-track embeddings plus the per-artist average embedding.
+
 ## Code Layout
 
 - `src/streetparade_embeddings/audio.py`: audio loading, resampling, chunking, normalization.
@@ -75,6 +119,7 @@ Outputs are written to `outputs/artist_embeddings.npz` and `outputs/artist_metad
 - `src/streetparade_embeddings/embeddings.py`: lazy CLAP model wrapper and embedding aggregation.
 - `src/streetparade_embeddings/pipeline.py`: orchestration for download and embedding runs.
 - `src/streetparade_embeddings/cli.py`: command-line interface.
+- `src/streetparade_embeddings/api.py`: FastAPI and SQLite metadata server.
 
 The notebooks are retained as exploration artifacts. New analysis should import package modules instead of redefining pipeline logic in notebook cells.
 

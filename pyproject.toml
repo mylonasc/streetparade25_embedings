@@ -9,6 +9,7 @@ description = "SoundCloud download and CLAP embedding pipeline for Street Parade
 requires-python = ">=3.10,<3.14"
 dependencies = [
   "beautifulsoup4",
+  "fastapi",
   "lxml[html-clean]>=6.1.1",
   "nest-asyncio>=1.6.0",
   "numpy",
@@ -17,6 +18,7 @@ dependencies = [
   "soundcloud-lib",
   "torch",
   "transformers",
+  "uvicorn[standard]",
   "yt-dlp",
 ]
 

@@ -32,6 +32,9 @@ class Artist:
     links: list[str]
     images: list[str]
     soundcloud_url: str | None = None
+    instagram : str | None = None
+    youtube : str  | None = None
+    web : str | None = None
 
 
 @dataclass(frozen=True)
