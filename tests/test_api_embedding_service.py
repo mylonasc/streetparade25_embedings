@@ -7,6 +7,7 @@ import numpy as np
 
 from streetparade_embeddings import api
 from streetparade_embeddings.config import Device
+from streetparade_embeddings.models import TrackDownload
 
 
 def test_artist_api_matches_artist_model_metadata(monkeypatch, tmp_path):
@@ -18,6 +19,9 @@ def test_artist_api_matches_artist_model_metadata(monkeypatch, tmp_path):
                 name="Full Artist",
                 links=["https://example.com", "https://soundcloud.com/full"],
                 images=["https://example.com/image.jpg"],
+                info=["Main Stage", "Label (ZH)"],
+                socials=[{"platform": "facebook", "url": "https://facebook.com/full"}],
+                bio="Artist biography",
                 soundcloud_url="https://soundcloud.com/full",
                 instagram="https://instagram.com/full",
                 youtube="https://youtube.com/@full",
@@ -31,11 +35,17 @@ def test_artist_api_matches_artist_model_metadata(monkeypatch, tmp_path):
 
     assert created["links"] == ["https://example.com", "https://soundcloud.com/full"]
     assert created["images"] == ["https://example.com/image.jpg"]
+    assert created["info"] == ["Main Stage", "Label (ZH)"]
+    assert created["socials"] == [{"platform": "facebook", "url": "https://facebook.com/full"}]
+    assert created["bio"] == "Artist biography"
     assert created["instagram"] == "https://instagram.com/full"
     assert created["youtube"] == "https://youtube.com/@full"
     assert created["web"] == "https://example.com"
     assert updated["links"] == created["links"]
     assert updated["images"] == created["images"]
+    assert updated["info"] == created["info"]
+    assert updated["socials"] == created["socials"]
+    assert updated["bio"] == created["bio"]
     assert updated["youtube"] == "https://youtube.com/@updated"
 
 
@@ -71,10 +81,203 @@ def test_artist_schema_migrates_existing_database(monkeypatch, tmp_path):
     assert artist["name"] == "Old Artist"
     assert artist["links"] == []
     assert artist["images"] == []
+    assert artist["info"] == []
+    assert artist["socials"] == []
+    assert artist["bio"] is None
     assert artist["soundcloud_url"] == "https://soundcloud.com/old"
     assert "instagram" in artist
     assert "youtube" in artist
     assert "web" in artist
+
+
+def test_track_schema_migrates_download_status(monkeypatch, tmp_path):
+    db_path = tmp_path / "track-migration.sqlite3"
+    monkeypatch.setenv("STREETPARADE_DB", str(db_path))
+    now = api._now()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE artists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                soundcloud_url TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE tracks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
+                url TEXT NOT NULL,
+                path TEXT,
+                downloaded INTEGER NOT NULL DEFAULT 0,
+                sample_count INTEGER NOT NULL DEFAULT 0,
+                sampling_rate INTEGER,
+                chunk_seconds INTEGER,
+                chunk_stride_seconds INTEGER,
+                max_chunks INTEGER,
+                embedding BLOB,
+                embedding_dim INTEGER,
+                embedding_model TEXT,
+                embedded_at TEXT,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(artist_id, url)
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO artists (name, soundcloud_url, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            ("Old Artist", None, now, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO tracks (artist_id, url, path, downloaded, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (1, "https://soundcloud.com/a/t", "/tmp/track.mp3", 1, now, now),
+        )
+
+    api.init_db()
+
+    with api._connect() as conn:
+        row = conn.execute("SELECT download_status FROM tracks WHERE id = 1").fetchone()
+    assert row["download_status"] == "completed"
+
+
+def test_download_endpoint_queues_and_exposes_downloading_then_completed(monkeypatch, tmp_path):
+    monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "download-status.sqlite3"))
+    started = threading.Event()
+    release = threading.Event()
+    track_url = "https://soundcloud.com/example/track"
+
+    def fake_download_track(url, path):
+        started.set()
+        release.wait(timeout=2)
+        path.write_bytes(b"not real mp3")
+        return TrackDownload(artist="Artist", url=url, path=path, downloaded=True)
+
+    monkeypatch.setattr(api, "download_track", fake_download_track)
+
+    async def run():
+        service = api.DownloadService()
+        monkeypatch.setattr(api, "download_service", service)
+        try:
+            artist = await api.create_artist(api.ArtistCreate(name="Download Artist"))
+            job = await api.download_artist_tracks(
+                artist["id"],
+                api.DownloadRequest(max_tracks=1, track_urls=[track_url], cache_dir=str(tmp_path / "cache")),
+            )
+            assert job["status"] in {"queued", "running"}
+            assert job["processed_count"] == 0
+            assert (await api.list_download_jobs())[0]["id"] == job["id"]
+            assert (await api.get_download_job(job["id"]))["id"] == job["id"]
+
+            assert await asyncio.to_thread(started.wait, 2)
+            tracks_while_downloading = await api.list_artist_tracks(artist["id"])
+            release.set()
+            while service.get_job(job["id"]).status in {"queued", "running", "cancelling"}:
+                await asyncio.sleep(0.01)
+            final_job = service.get_job(job["id"]).as_dict()
+            tracks_after = await api.list_artist_tracks(artist["id"])
+            return tracks_while_downloading, final_job, tracks_after
+        finally:
+            release.set()
+            await service.stop()
+
+    tracks_while_downloading, job, tracks_after = asyncio.run(run())
+
+    assert tracks_while_downloading[0]["download_status"] == "downloading"
+    assert tracks_while_downloading[0]["downloaded"] is False
+    assert job["status"] == "completed"
+    assert job["processed"][0]["download_status"] == "completed"
+    assert tracks_after[0]["download_status"] == "completed"
+    assert tracks_after[0]["downloaded"] is True
+
+
+def test_download_job_can_be_cancelled_between_tracks(monkeypatch, tmp_path):
+    monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "download-cancel.sqlite3"))
+    calls = []
+    started = threading.Event()
+    release = threading.Event()
+    track_urls = ["https://soundcloud.com/example/one", "https://soundcloud.com/example/two"]
+
+    def fake_download_track(url, path):
+        calls.append(url)
+        started.set()
+        release.wait(timeout=2)
+        path.write_bytes(b"not real mp3")
+        return TrackDownload(artist="Artist", url=url, path=path, downloaded=True)
+
+    monkeypatch.setattr(api, "download_track", fake_download_track)
+
+    async def run():
+        service = api.DownloadService()
+        monkeypatch.setattr(api, "download_service", service)
+        try:
+            artist = await api.create_artist(api.ArtistCreate(name="Cancel Download Artist"))
+            job = await api.download_artist_tracks(
+                artist["id"],
+                api.DownloadRequest(max_tracks=2, track_urls=track_urls, cache_dir=str(tmp_path / "cache")),
+            )
+            assert await asyncio.to_thread(started.wait, 2)
+            cancelled = await api.cancel_download_job(job["id"])
+            assert cancelled["status"] in {"cancelling", "cancelled"}
+            release.set()
+            while service.get_job(job["id"]).status in {"queued", "running", "cancelling"}:
+                await asyncio.sleep(0.01)
+            tracks = await api.list_artist_tracks(artist["id"])
+            return service.get_job(job["id"]).as_dict(), tracks
+        finally:
+            release.set()
+            await service.stop()
+
+    job, tracks = asyncio.run(run())
+
+    assert job["status"] == "cancelled"
+    assert calls == [track_urls[0]]
+    assert len(tracks) == 1
+    assert tracks[0]["download_status"] == "completed"
+
+
+def test_download_job_reports_completed_with_errors(monkeypatch, tmp_path):
+    monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "download-errors.sqlite3"))
+    track_urls = ["https://soundcloud.com/example/ok", "https://soundcloud.com/example/fail"]
+
+    def fake_download_track(url, path):
+        if url.endswith("fail"):
+            raise RuntimeError("boom")
+        path.write_bytes(b"not real mp3")
+        return TrackDownload(artist="Artist", url=url, path=path, downloaded=True)
+
+    monkeypatch.setattr(api, "download_track", fake_download_track)
+
+    async def run():
+        service = api.DownloadService()
+        monkeypatch.setattr(api, "download_service", service)
+        try:
+            artist = await api.create_artist(api.ArtistCreate(name="Partial Download Artist"))
+            job = await api.download_artist_tracks(
+                artist["id"],
+                api.DownloadRequest(max_tracks=2, track_urls=track_urls, cache_dir=str(tmp_path / "cache")),
+            )
+            while service.get_job(job["id"]).status in {"queued", "running", "cancelling"}:
+                await asyncio.sleep(0.01)
+            tracks = await api.list_artist_tracks(artist["id"])
+            return service.get_job(job["id"]).as_dict(), tracks
+        finally:
+            await service.stop()
+
+    job, tracks = asyncio.run(run())
+
+    assert job["status"] == "completed_with_errors"
+    assert job["processed_count"] == 2
+    assert [track["download_status"] for track in tracks] == ["completed", "failed"]
+    assert tracks[1]["last_error"] == "boom"
 
 
 def _insert_track(artist: str = "Artist", url: str = "https://soundcloud.com/a/t") -> int:

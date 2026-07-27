@@ -80,7 +80,7 @@ Example flow:
 ```bash
 curl -X POST http://127.0.0.1:8000/artists \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Hilit Kolet","links":["https://soundcloud.com/hilitkolet"],"images":[],"soundcloud_url":"https://soundcloud.com/hilitkolet","instagram":null,"youtube":null,"web":null}'
+  -d '{"name":"Hilit Kolet","links":["https://soundcloud.com/hilitkolet"],"images":[],"info":[],"bio":null,"soundcloud_url":"https://soundcloud.com/hilitkolet","instagram":null,"youtube":null,"web":null}'
 
 curl -X POST http://127.0.0.1:8000/artists/1/download \
   -H 'Content-Type: application/json' \
@@ -101,8 +101,11 @@ Embedding compute requests are queued. The server owns one lazy CLAP model insta
 
 Useful endpoints:
 
-- `POST /artists`: create or update an artist using the package `Artist` metadata shape: `name`, `links`, `images`, `soundcloud_url`, `instagram`, `youtube`, and `web`.
-- `POST /artists/{artist_id}/download`: discover/download tracks and store chunk sample metadata.
+- `POST /artists`: create or update an artist with `name`, `links`, `images`, `info`, `bio`, `soundcloud_url`, `instagram`, `youtube`, and `web`.
+- `POST /artists/{artist_id}/download`: enqueue SoundCloud discovery/download work and return a download job immediately.
+- `GET /download-jobs`: list queued/running/completed/failed/cancelled download jobs.
+- `GET /download-jobs/{job_id}`: inspect one download job.
+- `POST /download-jobs/{job_id}/cancel`: cancel a queued download job or request cancellation after the current track finishes.
 - `GET /artists/{artist_id}/tracks`: list stored tracks, paths, sample counts, and embedding status.
 - `POST /embeddings/compute`: enqueue missing per-track embeddings across all artists, or pass `artist_id`.
 - `GET /embedding-jobs`: list queued/running/completed/failed/cancelled embedding jobs.
@@ -110,6 +113,35 @@ Useful endpoints:
 - `POST /embedding-jobs/{job_id}/cancel`: cancel a queued job or request cancellation of a running job.
 - `GET /tracks/{track_id}/embedding`: retrieve one stored track embedding.
 - `GET /artists/{artist_id}/embeddings`: retrieve per-track embeddings plus the per-artist average embedding.
+
+## Admin UI And Docker
+
+Start the API and React admin UI with persistence on the host disk:
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- API: `http://localhost:8000`
+- Admin UI: `http://localhost:3000`
+
+Persistent host folders used by `docker-compose.yml`:
+
+- `./data`: SQLite database at `./data/streetparade_embeddings.sqlite3`.
+- `./.songs_cache`: downloaded SoundCloud MP3s.
+- `./hf-cache`: Hugging Face model cache for CLAP downloads.
+
+For local frontend development against a locally running API:
+
+```bash
+cd fe-admin
+npm install
+VITE_API_BASE_URL=http://localhost:8000 npm run dev
+```
+
+The admin UI supports adding/updating artists, listing artists, queueing downloads for one artist, queueing per-artist or global embedding jobs, cancelling jobs, viewing tracks, and retrieving artist-level average embedding metadata. Download jobs are non-blocking; track rows appear with `download_status` values such as `downloading`, `completed`, and `failed` while the UI polls the API.
 
 ## Code Layout
 
@@ -120,6 +152,8 @@ Useful endpoints:
 - `src/streetparade_embeddings/pipeline.py`: orchestration for download and embedding runs.
 - `src/streetparade_embeddings/cli.py`: command-line interface.
 - `src/streetparade_embeddings/api.py`: FastAPI and SQLite metadata server.
+- `fe-admin/`: React admin UI for operating the API.
+- `docker-compose.yml`: API and frontend deployment with host-mounted persistence.
 
 The notebooks are retained as exploration artifacts. New analysis should import package modules instead of redefining pipeline logic in notebook cells.
 
