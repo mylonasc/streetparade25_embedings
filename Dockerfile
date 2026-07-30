@@ -19,4 +19,4 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "streetparade_embeddings.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python -m streetparade_embeddings.bootstrap && uvicorn streetparade_embeddings.api:app --host 0.0.0.0 --port 8000"]

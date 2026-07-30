@@ -6,8 +6,30 @@ import sqlite3
 import numpy as np
 
 from streetparade_embeddings import api
+from streetparade_embeddings import repositories
 from streetparade_embeddings.config import Device
 from streetparade_embeddings.models import TrackDownload
+
+
+class FakeVectorStore:
+    def __init__(self):
+        self.vectors = {}
+
+    def upsert_embedding(self, vector_id, embedding, metadata):
+        self.vectors[vector_id] = (embedding, metadata)
+        return vector_id
+
+    def get_embedding(self, vector_id):
+        item = self.vectors.get(vector_id)
+        if item is None:
+            return None
+        return item[0].astype(float).tolist()
+
+    def query_by_vector(self, embedding, n_results=10, where=None):
+        return []
+
+    def query_by_embedding_ids(self, vector_ids, n_results=10, where=None):
+        return []
 
 
 def test_artist_api_matches_artist_model_metadata(monkeypatch, tmp_path):
@@ -147,6 +169,38 @@ def test_track_schema_migrates_download_status(monkeypatch, tmp_path):
     with api._connect() as conn:
         row = conn.execute("SELECT download_status FROM tracks WHERE id = 1").fetchone()
     assert row["download_status"] == "completed"
+
+
+def test_list_tracks_is_paged_for_python_api_and_repository(monkeypatch, tmp_path):
+    monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "tracks.sqlite3"))
+
+    async def run():
+        artist = await api.create_artist(api.ArtistCreate(name="Paged Artist"))
+        with api._connect() as conn:
+            for index in range(3):
+                repositories.upsert_track(
+                    conn,
+                    artist["id"],
+                    f"https://example.com/{index}",
+                    f"/tmp/{index}.mp3",
+                    downloaded=True,
+                    download_status="completed",
+                    now=api._now,
+                )
+        first_page = await api.list_tracks(page=1, page_size=2)
+        second_page = repositories.list_tracks(page=2, page_size=2)
+        return first_page, second_page
+
+    first_page, second_page = asyncio.run(run())
+
+    assert first_page["page"] == 1
+    assert first_page["page_size"] == 2
+    assert first_page["total"] == 3
+    assert first_page["has_next"] is True
+    assert [track["url"] for track in first_page["tracks"]] == ["https://example.com/0", "https://example.com/1"]
+    assert second_page["page"] == 2
+    assert second_page["has_next"] is False
+    assert [track["url"] for track in second_page["tracks"]] == ["https://example.com/2"]
 
 
 def test_download_endpoint_queues_and_exposes_downloading_then_completed(monkeypatch, tmp_path):
@@ -301,6 +355,8 @@ def _insert_track(artist: str = "Artist", url: str = "https://soundcloud.com/a/t
 
 def test_embedding_service_reuses_lazy_model(monkeypatch, tmp_path):
     monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "reuse.sqlite3"))
+    vector_store = FakeVectorStore()
+    monkeypatch.setattr(repositories, "get_vector_store", lambda: vector_store)
     track_id = _insert_track()
 
     class FakeModel:
@@ -334,13 +390,19 @@ def test_embedding_service_reuses_lazy_model(monkeypatch, tmp_path):
     assert FakeModel.init_count == 1
     assert FakeModel.embed_count == 2
     with api._connect() as conn:
-        row = conn.execute("SELECT embedding_dim, embedding_model FROM tracks WHERE id = ?", (track_id,)).fetchone()
+        row = conn.execute("SELECT embedding_dim, embedding_model, embedding FROM tracks WHERE id = ?", (track_id,)).fetchone()
+        embedding_row = conn.execute("SELECT vector_id, embedding_dim, embedding_model FROM track_embeddings WHERE track_id = ?", (track_id,)).fetchone()
     assert row["embedding_dim"] == 2
     assert row["embedding_model"] == "laion/clap-htsat-unfused"
+    assert row["embedding"] is None
+    assert embedding_row["embedding_dim"] == 2
+    assert embedding_row["embedding_model"] == "laion/clap-htsat-unfused"
+    assert embedding_row["vector_id"] in vector_store.vectors
 
 
 def test_embedding_job_can_be_cancelled_from_api(monkeypatch, tmp_path):
     monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "cancel.sqlite3"))
+    monkeypatch.setattr(repositories, "get_vector_store", lambda: FakeVectorStore())
     track_id = _insert_track()
     started = threading.Event()
 

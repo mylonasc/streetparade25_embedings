@@ -1,0 +1,189 @@
+@startuml StreetParadeEmbeddingsDataModel
+title Street Parade Embeddings Data Model
+
+hide circle
+skinparam classAttributeIconSize 0
+
+package "SQLite metadata" {
+  entity "artists" as artists {
+    * id : INTEGER <<PK>>
+    --
+    uuid : TEXT <<unique>>
+    name : TEXT <<unique>>
+    links : JSON TEXT
+    images : JSON TEXT
+    info : JSON TEXT
+    socials : JSON TEXT
+    bio : TEXT
+    soundcloud_url : TEXT
+    instagram : TEXT
+    youtube : TEXT
+    web : TEXT
+    created_at : TEXT
+    updated_at : TEXT
+  }
+
+  entity "tracks" as tracks {
+    * id : INTEGER <<PK>>
+    --
+    uuid : TEXT <<unique>>
+    artist_id : INTEGER <<FK>>
+    url : TEXT
+    path : TEXT
+    downloaded : INTEGER
+    download_status : TEXT
+    sample_count : INTEGER
+    sampling_rate : INTEGER
+    chunk_seconds : INTEGER
+    chunk_stride_seconds : INTEGER
+    max_chunks : INTEGER
+    embedding_dim : INTEGER
+    embedding_model : TEXT
+    embedded_at : TEXT
+    embedding : BLOB
+    last_error : TEXT
+    created_at : TEXT
+    updated_at : TEXT
+    --
+    UNIQUE(artist_id, url)
+  }
+
+  entity "track_samples" as track_samples {
+    * id : INTEGER <<PK>>
+    --
+    track_id : INTEGER <<FK>>
+    chunk_index : INTEGER
+    start_seconds : REAL
+    duration_seconds : REAL
+    --
+    UNIQUE(track_id, chunk_index)
+  }
+
+  entity "track_embeddings" as track_embeddings {
+    * id : INTEGER <<PK>>
+    --
+    uuid : TEXT <<unique>>
+    vector_id : TEXT <<unique>>
+    track_id : INTEGER <<FK>>
+    artist_id : INTEGER <<FK>>
+    artist_uuid : TEXT
+    embedding_backend : TEXT
+    embedding_model : TEXT
+    embedding_model_config : JSON TEXT
+    embedding_model_config_hash : TEXT
+    sampling_strategy : JSON TEXT
+    sampling_strategy_hash : TEXT
+    pipeline_config : JSON TEXT
+    embedding_dim : INTEGER
+    embedded_at : TEXT
+    last_error : TEXT
+    created_at : TEXT
+    updated_at : TEXT
+    --
+    UNIQUE(track_id, embedding_backend, embedding_model, embedding_model_config_hash, sampling_strategy_hash)
+  }
+}
+
+package "ChromaDB local vector store" {
+  entity "Chroma track_embeddings" as chroma_track_embeddings {
+    * id : TEXT <<vector_id>>
+    --
+    embedding : FLOAT[]
+    metadata.vector_id : TEXT
+    metadata.track_id : INTEGER
+    metadata.track_uuid : TEXT
+    metadata.artist_id : INTEGER
+    metadata.artist_uuid : TEXT
+    metadata.source_url : TEXT
+    metadata.embedding_backend : TEXT
+    metadata.embedding_model : TEXT
+    metadata.embedding_model_config_hash : TEXT
+    metadata.sampling_strategy_hash : TEXT
+    metadata.embedding_dim : INTEGER
+    metadata.embedded_at : TEXT
+  }
+}
+
+package "Runtime request/config objects" {
+  class "DownloadRequest" as DownloadRequest {
+    max_tracks : int
+    track_urls : list[str] | null
+    discovery_method : DiscoveryMethod
+    cache_dir : str
+    sampling_rate : int
+    chunk_seconds : int
+    chunk_stride_seconds : int
+    max_chunks : int
+  }
+
+  class "ComputeRequest" as ComputeRequest {
+    artist_id : int | null
+    only_missing : bool
+    embedding_backend : str
+    model_name : str
+    model_revision : str | null
+    model_options : dict
+    device : Device
+    sampling_rate : int
+    chunk_seconds : int
+    chunk_stride_seconds : int
+    max_chunks : int
+    max_tracks : int | null
+  }
+
+  class "SimilaritySearchRequest" as SimilaritySearchRequest {
+    embedding : list[float] | null
+    vector_ids : list[str] | null
+    track_ids : list[int] | null
+    n_results : int
+    artist_id : int | null
+    embedding_backend : str | null
+    embedding_model : str | null
+    sampling_strategy_hash : str | null
+  }
+}
+
+package "Services" {
+  class "DownloadService" as DownloadService
+  class "LazyClapEmbeddingService" as EmbeddingService
+  class "ChromaVectorStore" as ChromaVectorStore
+  class "ClapEmbeddingModel" as ClapEmbeddingModel
+}
+
+artists ||--o{ tracks : owns
+tracks ||--o{ track_samples : sampled into
+artists ||--o{ track_embeddings : has
+tracks ||--o{ track_embeddings : embedded as
+track_embeddings .. chroma_track_embeddings : vector_id
+
+DownloadRequest ..> DownloadService : enqueues
+DownloadService ..> artists : reads artist source
+DownloadService ..> tracks : upserts downloads
+DownloadService ..> track_samples : records chunks
+
+ComputeRequest ..> EmbeddingService : enqueues
+EmbeddingService ..> tracks : selects downloaded tracks
+EmbeddingService ..> ClapEmbeddingModel : computes vectors
+EmbeddingService ..> track_embeddings : stores metadata
+EmbeddingService ..> ChromaVectorStore : stores vectors
+ChromaVectorStore ..> chroma_track_embeddings : persists/query
+
+SimilaritySearchRequest ..> ChromaVectorStore : query
+SimilaritySearchRequest ..> track_embeddings : enriches results
+
+note right of tracks
+  embedding BLOB is legacy compatibility.
+  New writes store vectors only in ChromaDB.
+end note
+
+note bottom of track_embeddings
+  Uniqueness is per:
+  track + backend + model + model config hash + sampling strategy hash.
+end note
+
+note bottom of chroma_track_embeddings
+  Local persistence directory:
+  STREETPARADE_CHROMA_DIR or ./chroma
+end note
+
+@enduml

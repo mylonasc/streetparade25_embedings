@@ -19,6 +19,48 @@ Data Models
    :members:
    :undoc-members:
 
+API Schemas
+-----------
+
+.. automodule:: streetparade_embeddings.schemas
+   :members:
+   :undoc-members:
+
+Database Utilities
+------------------
+
+.. automodule:: streetparade_embeddings.db
+   :members:
+   :undoc-members:
+
+Response Helpers
+----------------
+
+.. automodule:: streetparade_embeddings.responses
+   :members:
+   :undoc-members:
+
+Repository Helpers
+------------------
+
+.. automodule:: streetparade_embeddings.repositories
+   :members:
+   :undoc-members:
+
+Provenance Helpers
+------------------
+
+.. automodule:: streetparade_embeddings.provenance
+   :members:
+   :undoc-members:
+
+Vector Store
+------------
+
+.. automodule:: streetparade_embeddings.vectorstore
+   :members:
+   :undoc-members:
+
 Audio Processing
 ----------------
 
@@ -53,12 +95,5 @@ Pipeline Orchestration
 ----------------------
 
 .. automodule:: streetparade_embeddings.pipeline
-   :members:
-   :undoc-members:
-
-CLI Module
-----------
-
-.. automodule:: streetparade_embeddings.cli
    :members:
    :undoc-members:

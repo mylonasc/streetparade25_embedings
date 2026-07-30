@@ -1,370 +1,80 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import asyncio
-import json
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import numpy as np
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 
-from .audio import DEFAULT_SAMPLING_RATE, preprocess_track
 from .config import Device
-from .embeddings import ClapEmbeddingModel, aggregate_embeddings
-from .soundcloud import ArtistData, DiscoveryMethod, discover_track_urls_requests_html, discover_track_urls_sync, download_track
+from .db import connect as _connect
+from .db import db_path as _db_path
+from .db import ensure_entity_uuids as _ensure_entity_uuids
+from .db import init_db
+from .embeddings import ClapEmbeddingModel
+from .provenance import config_hash as _config_hash
+from .repositories import complete_track_download as _complete_track_download
+from .repositories import create_or_update_artist as _create_or_update_artist
+from .repositories import fail_track_download as _fail_track_download
+from .repositories import get_artist_embeddings as _get_artist_embeddings
+from .repositories import get_artist_response as _get_artist_response
+from .repositories import get_artist as _get_artist
+from .repositories import get_artist_dict as _get_artist_dict
+from .repositories import get_track_embedding as _get_track_embedding
+from .repositories import get_track_samples as _get_track_samples
+from .repositories import list_artist_tracks as _list_artist_tracks
+from .repositories import list_artists as _list_artists
+from .repositories import list_tracks as _list_tracks
+from .repositories import list_track_embeddings as _list_track_embeddings
+from .repositories import prepare_track_download as _prepare_track_download
+from .repositories import select_embedding_rows as _select_embedding_rows
+from .repositories import similarity_search as _similarity_search
+from .repositories import store_track_embedding as _store_track_embedding
+from .repositories import store_track_error as _store_track_error
+from .repositories import validate_artist_download_request as _validate_artist_download_request
+from .responses import track_response as _track_response
+from .schemas import ArtistCreate, ComputeRequest, DownloadJob, DownloadRequest, EmbeddingJob, SimilaritySearchRequest
+from .schemas import set_job_clock
+from .soundcloud import DiscoveryMethod, discover_track_urls_requests_html, discover_track_urls_sync, download_track
+from .user_visualization import LayoutJob, UserTrackJob
+from .user_visualization import analyze_user_track as _analyze_user_track
+from .user_visualization import create_share as _create_share
+from .user_visualization import create_user_track as _create_user_track
+from .user_visualization import get_or_create_user as _get_or_create_user
+from .user_visualization import get_share as _get_share
+from .user_visualization import get_user as _get_user_profile
+from .user_visualization import get_user_track_for_username as _get_user_track_for_username
+from .user_visualization import latest_layout_points as _latest_layout_points
+from .user_visualization import list_user_tracks as _list_user_tracks
+from .user_visualization import load_layout_job as _load_layout_job
+from .user_visualization import load_user_track_job as _load_user_track_job
+from .user_visualization import recompute_layout as _recompute_layout
+from .user_visualization import record_user_track_job as _record_user_track_job
+from .user_visualization import save_layout_job as _save_layout_job
+from .user_visualization import set_user_track_status as _set_user_track_status
+from .user_visualization import visualization_points as _visualization_points
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _db_path() -> Path:
-    return Path(os.environ.get("STREETPARADE_DB", "streetparade_embeddings.sqlite3"))
+set_job_clock(_now)
 
 
 def _cors_origins() -> list[str]:
-    raw = os.environ.get("STREETPARADE_CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+    raw = os.environ.get(
+        "STREETPARADE_CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:3001,"
+        "http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:3000,http://127.0.0.1:3001",
+    )
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
-
-
-def _connect() -> sqlite3.Connection:
-    path = _db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
-    return conn
-
-
-def init_db() -> None:
-    with _connect() as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS artists (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                links TEXT NOT NULL DEFAULT '[]',
-                images TEXT NOT NULL DEFAULT '[]',
-                info TEXT NOT NULL DEFAULT '[]',
-                socials TEXT NOT NULL DEFAULT '[]',
-                bio TEXT,
-                soundcloud_url TEXT,
-                instagram TEXT,
-                youtube TEXT,
-                web TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS tracks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
-                url TEXT NOT NULL,
-                path TEXT,
-                downloaded INTEGER NOT NULL DEFAULT 0,
-                download_status TEXT NOT NULL DEFAULT 'not_started',
-                sample_count INTEGER NOT NULL DEFAULT 0,
-                sampling_rate INTEGER,
-                chunk_seconds INTEGER,
-                chunk_stride_seconds INTEGER,
-                max_chunks INTEGER,
-                embedding BLOB,
-                embedding_dim INTEGER,
-                embedding_model TEXT,
-                embedded_at TEXT,
-                last_error TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(artist_id, url)
-            );
-
-            CREATE TABLE IF NOT EXISTS track_samples (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-                chunk_index INTEGER NOT NULL,
-                start_seconds REAL NOT NULL,
-                duration_seconds REAL NOT NULL,
-                UNIQUE(track_id, chunk_index)
-            );
-            """
-        )
-        _ensure_artist_columns(conn)
-        _ensure_track_columns(conn)
-
-
-def _ensure_artist_columns(conn: sqlite3.Connection) -> None:
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(artists)")}
-    migrations = {
-        "links": "ALTER TABLE artists ADD COLUMN links TEXT NOT NULL DEFAULT '[]'",
-        "images": "ALTER TABLE artists ADD COLUMN images TEXT NOT NULL DEFAULT '[]'",
-        "info": "ALTER TABLE artists ADD COLUMN info TEXT NOT NULL DEFAULT '[]'",
-        "socials": "ALTER TABLE artists ADD COLUMN socials TEXT NOT NULL DEFAULT '[]'",
-        "bio": "ALTER TABLE artists ADD COLUMN bio TEXT",
-        "instagram": "ALTER TABLE artists ADD COLUMN instagram TEXT",
-        "youtube": "ALTER TABLE artists ADD COLUMN youtube TEXT",
-        "web": "ALTER TABLE artists ADD COLUMN web TEXT",
-    }
-    for column, statement in migrations.items():
-        if column not in columns:
-            conn.execute(statement)
-
-
-def _ensure_track_columns(conn: sqlite3.Connection) -> None:
-    columns = {row["name"] for row in conn.execute("PRAGMA table_info(tracks)")}
-    if "download_status" not in columns:
-        conn.execute("ALTER TABLE tracks ADD COLUMN download_status TEXT NOT NULL DEFAULT 'not_started'")
-        conn.execute("UPDATE tracks SET download_status = 'completed' WHERE downloaded = 1")
-
-
-def _row_dict(row: sqlite3.Row) -> dict[str, Any]:
-    return dict(row)
-
-
-def _json_list(value: str | None) -> list[str]:
-    if not value:
-        return []
-    loaded = json.loads(value)
-    if not isinstance(loaded, list):
-        return []
-    return [str(item) for item in loaded]
-
-
-def _json_data(value: str | None, default: Any) -> Any:
-    if not value:
-        return default
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return default
-
-
-def _artist_response(row: sqlite3.Row) -> dict[str, Any]:
-    result = _row_dict(row)
-    result["links"] = _json_list(result.get("links"))
-    result["images"] = _json_list(result.get("images"))
-    result["info"] = _json_list(result.get("info"))
-    result["socials"] = _json_data(result.get("socials"), [])
-    return result
-
-
-def _embedding_to_blob(embedding: np.ndarray) -> bytes:
-    return np.asarray(embedding, dtype=np.float32).tobytes()
-
-
-def _embedding_from_blob(blob: bytes | None) -> list[float] | None:
-    if blob is None:
-        return None
-    return np.frombuffer(blob, dtype=np.float32).astype(float).tolist()
-
-
-def _track_response(row: sqlite3.Row, include_embedding: bool = False) -> dict[str, Any]:
-    result = _row_dict(row)
-    result["downloaded"] = bool(result["downloaded"])
-    result["has_embedding"] = result.pop("embedding") is not None
-    if include_embedding:
-        result["embedding"] = _embedding_from_blob(row["embedding"])
-    return result
-
-
-def _get_artist(conn: sqlite3.Connection, artist_id: int) -> sqlite3.Row:
-    row = conn.execute("SELECT * FROM artists WHERE id = ?", (artist_id,)).fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="artist not found")
-    return row
-
-
-def _upsert_track(
-    conn: sqlite3.Connection,
-    artist_id: int,
-    url: str,
-    path: str | None = None,
-    downloaded: bool = False,
-    download_status: str | None = None,
-) -> int:
-    now = _now()
-    status = download_status or ("completed" if downloaded else "not_started")
-    conn.execute(
-        """
-        INSERT INTO tracks (artist_id, url, path, downloaded, download_status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(artist_id, url) DO UPDATE SET
-            path = COALESCE(excluded.path, tracks.path),
-            downloaded = CASE WHEN excluded.downloaded THEN 1 ELSE tracks.downloaded END,
-            download_status = excluded.download_status,
-            updated_at = excluded.updated_at
-        """,
-        (artist_id, url, path, int(downloaded), status, now, now),
-    )
-    return int(conn.execute("SELECT id FROM tracks WHERE artist_id = ? AND url = ?", (artist_id, url)).fetchone()["id"])
-
-
-def _set_track_download_status(
-    conn: sqlite3.Connection,
-    track_id: int,
-    status: str,
-    downloaded: bool | None = None,
-    error: str | None = None,
-) -> sqlite3.Row:
-    downloaded_sql = "downloaded" if downloaded is None else "?"
-    params: list[Any] = [status]
-    if downloaded is not None:
-        params.append(int(downloaded))
-    params.extend([error, _now(), track_id])
-    conn.execute(
-        f"""
-        UPDATE tracks
-        SET download_status = ?, downloaded = {downloaded_sql}, last_error = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        params,
-    )
-    return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
-
-
-def _record_samples(
-    conn: sqlite3.Connection,
-    track_id: int,
-    path: str | Path,
-    sampling_rate: int,
-    chunk_seconds: int,
-    chunk_stride_seconds: int,
-    max_chunks: int,
-) -> int:
-    chunks = preprocess_track(
-        path,
-        sampling_rate=sampling_rate,
-        chunk_seconds=chunk_seconds,
-        stride_seconds=chunk_stride_seconds,
-        max_chunks=max_chunks,
-    )
-    conn.execute("DELETE FROM track_samples WHERE track_id = ?", (track_id,))
-    for idx in range(len(chunks)):
-        conn.execute(
-            """
-            INSERT INTO track_samples (track_id, chunk_index, start_seconds, duration_seconds)
-            VALUES (?, ?, ?, ?)
-            """,
-            (track_id, idx, idx * chunk_stride_seconds, chunk_seconds),
-        )
-    conn.execute(
-        """
-        UPDATE tracks
-        SET sample_count = ?, sampling_rate = ?, chunk_seconds = ?, chunk_stride_seconds = ?, max_chunks = ?,
-            last_error = NULL, updated_at = ?
-        WHERE id = ?
-        """,
-        (len(chunks), sampling_rate, chunk_seconds, chunk_stride_seconds, max_chunks, _now(), track_id),
-    )
-    return len(chunks)
-
-
-class ArtistCreate(BaseModel):
-    name: str = Field(min_length=1)
-    links: list[str] = Field(default_factory=list)
-    images: list[str] = Field(default_factory=list)
-    info: list[str] = Field(default_factory=list)
-    socials: list[dict[str, Any]] = Field(default_factory=list)
-    bio: str | None = None
-    soundcloud_url: str | None = None
-    instagram: str | None = None
-    youtube: str | None = None
-    web: str | None = None
-
-
-class DownloadRequest(BaseModel):
-    max_tracks: int = Field(default=5, ge=1)
-    track_urls: list[str] | None = None
-    discovery_method: DiscoveryMethod = DiscoveryMethod.YT_DLP
-    cache_dir: str = ".songs_cache"
-    sampling_rate: int = DEFAULT_SAMPLING_RATE
-    chunk_seconds: int = Field(default=30, ge=1)
-    chunk_stride_seconds: int = Field(default=60, ge=1)
-    max_chunks: int = Field(default=10, ge=1)
-
-
-class ComputeRequest(BaseModel):
-    artist_id: int | None = None
-    only_missing: bool = True
-    model_name: str = "laion/clap-htsat-unfused"
-    device: Device = Device.AUTO
-    sampling_rate: int = DEFAULT_SAMPLING_RATE
-    chunk_seconds: int = Field(default=30, ge=1)
-    chunk_stride_seconds: int = Field(default=60, ge=1)
-    max_chunks: int = Field(default=10, ge=1)
-    max_tracks: int | None = Field(default=None, ge=1)
-
-
-@dataclass
-class EmbeddingJob:
-    id: str
-    request: ComputeRequest
-    status: str = "queued"
-    processed: list[dict[str, Any]] = field(default_factory=list)
-    total: int | None = None
-    error: str | None = None
-    cancel_requested: bool = False
-    created_at: str = field(default_factory=_now)
-    started_at: str | None = None
-    finished_at: str | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "status": self.status,
-            "processed": self.processed,
-            "processed_count": len(self.processed),
-            "total": self.total,
-            "error": self.error,
-            "cancel_requested": self.cancel_requested,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "finished_at": self.finished_at,
-            "request": self.request.model_dump(mode="json"),
-        }
-
-
-@dataclass
-class DownloadJob:
-    id: str
-    artist_id: int
-    request: DownloadRequest
-    status: str = "queued"
-    phase: str | None = None
-    processed: list[dict[str, Any]] = field(default_factory=list)
-    total: int | None = None
-    error: str | None = None
-    cancel_requested: bool = False
-    created_at: str = field(default_factory=_now)
-    started_at: str | None = None
-    finished_at: str | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "artist_id": self.artist_id,
-            "status": self.status,
-            "phase": self.phase,
-            "processed": self.processed,
-            "processed_count": len(self.processed),
-            "total": self.total,
-            "error": self.error,
-            "cancel_requested": self.cancel_requested,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "finished_at": self.finished_at,
-            "request": self.request.model_dump(mode="json"),
-        }
-
 
 class LazyClapEmbeddingService:
     """Owns one lazily-loaded CLAP model and an async embedding job queue."""
@@ -372,7 +82,7 @@ class LazyClapEmbeddingService:
     def __init__(self, model_cls: type[ClapEmbeddingModel] = ClapEmbeddingModel):
         self.model_cls = model_cls
         self._model: ClapEmbeddingModel | None = None
-        self._model_key: tuple[str, Device] | None = None
+        self._model_key: tuple[str, str, str | None, Device, str] | None = None
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._jobs: dict[str, EmbeddingJob] = {}
         self._worker: asyncio.Task[None] | None = None
@@ -450,7 +160,7 @@ class LazyClapEmbeddingService:
 
                 try:
                     async with self._lock:
-                        model = await self._get_model(job.request.model_name, job.request.device)
+                        model = await self._get_model(job.request)
                         embedding = await asyncio.to_thread(
                             model.embed_track,
                             row["path"],
@@ -463,9 +173,9 @@ class LazyClapEmbeddingService:
                         job.status = "cancelled"
                         job.finished_at = _now()
                         return
-                    updated = await asyncio.to_thread(_store_track_embedding, row["id"], embedding, job.request)
+                    updated = await asyncio.to_thread(_store_track_embedding, row, embedding, job.request, _now)
                 except Exception as exc:
-                    updated = await asyncio.to_thread(_store_track_error, row["id"], str(exc))
+                    updated = await asyncio.to_thread(_store_track_error, row["id"], str(exc), _now)
                 job.processed.append(_track_response(updated))
 
             job.status = "completed"
@@ -475,10 +185,18 @@ class LazyClapEmbeddingService:
             job.error = str(exc)
             job.finished_at = _now()
 
-    async def _get_model(self, model_name: str, device: Device) -> ClapEmbeddingModel:
-        key = (model_name, device)
+    async def _get_model(self, request: ComputeRequest) -> ClapEmbeddingModel:
+        if request.embedding_backend != "clap":
+            raise ValueError(f"unsupported embedding backend: {request.embedding_backend}")
+        key = (
+            request.embedding_backend,
+            request.model_name,
+            request.model_revision,
+            request.device,
+            _config_hash(request.model_options),
+        )
         if self._model is None or self._model_key != key:
-            self._model = await asyncio.to_thread(self.model_cls, model_name=model_name, device=device)
+            self._model = await asyncio.to_thread(self.model_cls, model_name=request.model_name, device=request.device)
             self._model_key = key
         return self._model
 
@@ -575,15 +293,16 @@ class DownloadService:
                     artist["name"],
                     track_url,
                     job.request.cache_dir,
+                    _now,
                 )
                 try:
                     download = await asyncio.to_thread(download_track, track_url, Path(prepared["path"]))
                     if not Path(download.path).exists():
                         raise FileNotFoundError(f"download completed but file is missing: {download.path}")
-                    updated = await asyncio.to_thread(_complete_track_download, prepared["id"], download.path, job.request)
+                    updated = await asyncio.to_thread(_complete_track_download, prepared["id"], download.path, job.request, _now)
                 except Exception as exc:
                     failures += 1
-                    updated = await asyncio.to_thread(_fail_track_download, prepared["id"], prepared["path"], str(exc))
+                    updated = await asyncio.to_thread(_fail_track_download, prepared["id"], prepared["path"], str(exc), _now)
                 job.processed.append(_track_response(updated))
                 if job.cancel_requested:
                     job.status = "cancelled"
@@ -607,102 +326,6 @@ class DownloadService:
             job.phase = None
 
 
-def _select_embedding_rows(payload: ComputeRequest) -> list[dict[str, Any]]:
-    where = ["path IS NOT NULL"]
-    params: list[Any] = []
-    if payload.artist_id is not None:
-        where.append("artist_id = ?")
-        params.append(payload.artist_id)
-    if payload.only_missing:
-        where.append("embedding IS NULL")
-
-    query = f"SELECT * FROM tracks WHERE {' AND '.join(where)} ORDER BY artist_id, id"
-    if payload.max_tracks is not None:
-        query += " LIMIT ?"
-        params.append(payload.max_tracks)
-
-    with _connect() as conn:
-        if payload.artist_id is not None:
-            _get_artist(conn, payload.artist_id)
-        return [_row_dict(row) for row in conn.execute(query, params).fetchall()]
-
-
-def _store_track_embedding(track_id: int, embedding: np.ndarray, payload: ComputeRequest) -> sqlite3.Row:
-    with _connect() as conn:
-        now = _now()
-        conn.execute(
-            """
-            UPDATE tracks
-            SET embedding = ?, embedding_dim = ?, embedding_model = ?, embedded_at = ?, last_error = NULL,
-                sampling_rate = ?, chunk_seconds = ?, chunk_stride_seconds = ?, max_chunks = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                _embedding_to_blob(embedding),
-                int(embedding.shape[0]),
-                payload.model_name,
-                now,
-                payload.sampling_rate,
-                payload.chunk_seconds,
-                payload.chunk_stride_seconds,
-                payload.max_chunks,
-                now,
-                track_id,
-            ),
-        )
-        return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
-
-
-def _store_track_error(track_id: int, error: str) -> sqlite3.Row:
-    with _connect() as conn:
-        conn.execute("UPDATE tracks SET last_error = ?, updated_at = ? WHERE id = ?", (error, _now(), track_id))
-        return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
-
-
-def _get_artist_dict(artist_id: int) -> dict[str, Any]:
-    with _connect() as conn:
-        return _artist_response(_get_artist(conn, artist_id))
-
-
-def _prepare_track_download(artist_id: int, artist_name: str, track_url: str, cache_dir: str) -> dict[str, Any]:
-    path = ArtistData(artist_name, [track_url], cache_folder=cache_dir).get_track_path_by_url(track_url)
-    with _connect() as conn:
-        track_id = _upsert_track(
-            conn,
-            artist_id,
-            track_url,
-            str(path),
-            downloaded=path.exists(),
-            download_status="downloading",
-        )
-        return _track_response(conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone())
-
-
-def _complete_track_download(track_id: int, path: str | Path, payload: DownloadRequest) -> sqlite3.Row:
-    with _connect() as conn:
-        row = _set_track_download_status(conn, track_id, "completed", downloaded=True, error=None)
-        try:
-            _record_samples(
-                conn,
-                track_id,
-                path,
-                payload.sampling_rate,
-                payload.chunk_seconds,
-                payload.chunk_stride_seconds,
-                payload.max_chunks,
-            )
-        except Exception as exc:
-            conn.execute("UPDATE tracks SET last_error = ?, updated_at = ? WHERE id = ?", (str(exc), _now(), track_id))
-        return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone() or row
-
-
-def _fail_track_download(track_id: int, path: str | Path, error: str) -> sqlite3.Row:
-    with _connect() as conn:
-        file_exists = Path(path).exists()
-        status = "completed" if file_exists else "failed"
-        return _set_track_download_status(conn, track_id, status, downloaded=file_exists, error=error)
-
-
 async def _discover_artist_track_urls(soundcloud_url: str, method: DiscoveryMethod) -> list[str]:
     if method is DiscoveryMethod.REQUESTS_HTML:
         try:
@@ -716,14 +339,146 @@ embedding_service = LazyClapEmbeddingService()
 download_service = DownloadService()
 
 
+class UserTrackAnalysisService:
+    def __init__(self, model_cls: type[ClapEmbeddingModel] = ClapEmbeddingModel):
+        self.model_cls = model_cls
+        self._model: ClapEmbeddingModel | None = None
+        self._queue: asyncio.Queue[str] = asyncio.Queue()
+        self._jobs: dict[str, UserTrackJob] = {}
+        self._worker: asyncio.Task[None] | None = None
+        self._lock = asyncio.Lock()
+
+    async def start(self) -> None:
+        if self._worker is None or self._worker.done():
+            self._worker = asyncio.create_task(self._run(), name="user-track-analysis-worker")
+
+    async def stop(self) -> None:
+        if self._worker is None:
+            return
+        self._worker.cancel()
+        try:
+            await self._worker
+        except asyncio.CancelledError:
+            pass
+        self._worker = None
+
+    async def enqueue(self, user_track_id: int) -> UserTrackJob:
+        await self.start()
+        job = UserTrackJob(id=uuid4().hex, user_track_id=user_track_id)
+        self._jobs[job.id] = job
+        _record_user_track_job(job)
+        await self._queue.put(job.id)
+        return job
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        job = self._jobs.get(job_id)
+        return job.as_dict() if job else _load_user_track_job(job_id)
+
+    async def _run(self) -> None:
+        while True:
+            job_id = await self._queue.get()
+            job = self._jobs[job_id]
+            try:
+                await self._process(job)
+            finally:
+                self._queue.task_done()
+
+    async def _process(self, job: UserTrackJob) -> None:
+        request = ComputeRequest(only_missing=False)
+        job.status = "running"
+        job.phase = "analyzing"
+        job.started_at = _now()
+        _record_user_track_job(job)
+        try:
+            async with self._lock:
+                if self._model is None:
+                    self._model = await asyncio.to_thread(self.model_cls, model_name=request.model_name, device=request.device)
+                await asyncio.to_thread(_analyze_user_track, job.user_track_id, self._model, request)
+            job.status = "completed"
+            job.phase = None
+            job.finished_at = _now()
+        except Exception as exc:
+            job.status = "failed"
+            job.phase = None
+            job.error = str(exc)
+            job.finished_at = _now()
+            await asyncio.to_thread(_set_user_track_status, job.user_track_id, "failed", error=str(exc))
+        _record_user_track_job(job)
+
+
+class LayoutService:
+    def __init__(self):
+        self._queue: asyncio.Queue[str] = asyncio.Queue()
+        self._jobs: dict[str, LayoutJob] = {}
+        self._worker: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        if self._worker is None or self._worker.done():
+            self._worker = asyncio.create_task(self._run(), name="layout-worker")
+
+    async def stop(self) -> None:
+        if self._worker is None:
+            return
+        self._worker.cancel()
+        try:
+            await self._worker
+        except asyncio.CancelledError:
+            pass
+        self._worker = None
+
+    async def enqueue(self, username: str | None) -> LayoutJob:
+        await self.start()
+        job = LayoutJob(id=uuid4().hex, username=username)
+        self._jobs[job.id] = job
+        _save_layout_job(job)
+        await self._queue.put(job.id)
+        return job
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        job = self._jobs.get(job_id)
+        return job.as_dict() if job else _load_layout_job(job_id)
+
+    async def _run(self) -> None:
+        while True:
+            job_id = await self._queue.get()
+            job = self._jobs[job_id]
+            try:
+                await self._process(job)
+            finally:
+                self._queue.task_done()
+
+    async def _process(self, job: LayoutJob) -> None:
+        job.status = "running"
+        job.started_at = _now()
+        _save_layout_job(job)
+        try:
+            points = await asyncio.to_thread(_recompute_layout, job.username)
+            job.status = "completed"
+            job.finished_at = _now()
+            _save_layout_job(job, points=points)
+        except Exception as exc:
+            job.status = "failed"
+            job.error = str(exc)
+            job.finished_at = _now()
+            _save_layout_job(job)
+
+
+user_track_analysis_service = UserTrackAnalysisService()
+layout_service = LayoutService()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     await embedding_service.start()
     await download_service.start()
+    await user_track_analysis_service.start()
+    await layout_service.start()
     try:
         yield
     finally:
+        await layout_service.stop()
+        await user_track_analysis_service.stop()
         await download_service.stop()
         await embedding_service.stop()
 
@@ -746,82 +501,41 @@ async def health() -> dict[str, str]:
 @app.post("/artists")
 async def create_artist(payload: ArtistCreate) -> dict[str, Any]:
     init_db()
-    now = _now()
-    update_links = "links" in payload.model_fields_set
-    update_images = "images" in payload.model_fields_set
-    update_info = "info" in payload.model_fields_set
-    update_socials = "socials" in payload.model_fields_set
-    with _connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO artists (
-                name, links, images, info, socials, bio, soundcloud_url, instagram, youtube, web, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                links = CASE WHEN ? THEN excluded.links ELSE artists.links END,
-                images = CASE WHEN ? THEN excluded.images ELSE artists.images END,
-                info = CASE WHEN ? THEN excluded.info ELSE artists.info END,
-                socials = CASE WHEN ? THEN excluded.socials ELSE artists.socials END,
-                bio = COALESCE(excluded.bio, artists.bio),
-                soundcloud_url = COALESCE(excluded.soundcloud_url, artists.soundcloud_url),
-                instagram = COALESCE(excluded.instagram, artists.instagram),
-                youtube = COALESCE(excluded.youtube, artists.youtube),
-                web = COALESCE(excluded.web, artists.web),
-                updated_at = excluded.updated_at
-            """,
-            (
-                payload.name,
-                json.dumps(payload.links),
-                json.dumps(payload.images),
-                json.dumps(payload.info),
-                json.dumps(payload.socials),
-                payload.bio,
-                payload.soundcloud_url,
-                payload.instagram,
-                payload.youtube,
-                payload.web,
-                now,
-                now,
-                update_links,
-                update_images,
-                update_info,
-                update_socials,
-            ),
-        )
-        return _artist_response(conn.execute("SELECT * FROM artists WHERE name = ?", (payload.name,)).fetchone())
+    return _create_or_update_artist(payload, _now)
 
 
 @app.get("/artists")
 async def list_artists() -> list[dict[str, Any]]:
     init_db()
-    with _connect() as conn:
-        return [_artist_response(row) for row in conn.execute("SELECT * FROM artists ORDER BY name")]
+    return _list_artists()
 
 
 @app.get("/artists/{artist_id}")
 async def get_artist(artist_id: int) -> dict[str, Any]:
     init_db()
-    with _connect() as conn:
-        return _artist_response(_get_artist(conn, artist_id))
+    return _get_artist_response(artist_id)
 
 
 @app.get("/artists/{artist_id}/tracks")
 async def list_artist_tracks(artist_id: int, include_embedding: bool = False) -> list[dict[str, Any]]:
     init_db()
-    with _connect() as conn:
-        _get_artist(conn, artist_id)
-        rows = conn.execute("SELECT * FROM tracks WHERE artist_id = ? ORDER BY id", (artist_id,)).fetchall()
-        return [_track_response(row, include_embedding=include_embedding) for row in rows]
+    return _list_artist_tracks(artist_id, include_embedding=include_embedding)
+
+
+@app.get("/tracks")
+async def list_tracks(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1),
+    include_embedding: bool = False,
+) -> dict[str, Any]:
+    init_db()
+    return _list_tracks(page=page, page_size=page_size, include_embedding=include_embedding)
 
 
 @app.post("/artists/{artist_id}/download")
 async def download_artist_tracks(artist_id: int, payload: DownloadRequest) -> dict[str, Any]:
     init_db()
-    with _connect() as conn:
-        artist = _artist_response(_get_artist(conn, artist_id))
-        if payload.track_urls is None and not artist["soundcloud_url"]:
-            raise HTTPException(status_code=400, detail="artist has no soundcloud_url and no track_urls were supplied")
+    _validate_artist_download_request(artist_id, payload)
     job = await download_service.enqueue(artist_id, payload)
     return job.as_dict()
 
@@ -850,11 +564,19 @@ async def cancel_download_job(job_id: str) -> dict[str, Any]:
 @app.get("/tracks/{track_id}/samples")
 async def get_track_samples(track_id: int) -> list[dict[str, Any]]:
     init_db()
-    with _connect() as conn:
-        if conn.execute("SELECT id FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
-            raise HTTPException(status_code=404, detail="track not found")
-        rows = conn.execute("SELECT * FROM track_samples WHERE track_id = ? ORDER BY chunk_index", (track_id,)).fetchall()
-        return [_row_dict(row) for row in rows]
+    return _get_track_samples(track_id)
+
+
+@app.get("/tracks/{track_id}/embeddings")
+async def list_track_embeddings(track_id: int, include_embedding: bool = False) -> list[dict[str, Any]]:
+    init_db()
+    return _list_track_embeddings(track_id, include_embedding=include_embedding)
+
+
+@app.post("/similarity/track-embeddings")
+async def search_similar_track_embeddings(payload: SimilaritySearchRequest) -> dict[str, Any]:
+    init_db()
+    return {"results": _similarity_search(payload)}
 
 
 @app.post("/embeddings/compute")
@@ -897,31 +619,88 @@ async def cancel_embedding_job(job_id: str) -> dict[str, Any]:
 @app.get("/tracks/{track_id}/embedding")
 async def get_track_embedding(track_id: int) -> dict[str, Any]:
     init_db()
-    with _connect() as conn:
-        row = conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="track not found")
-        if row["embedding"] is None:
-            raise HTTPException(status_code=404, detail="track embedding not computed")
-        return _track_response(row, include_embedding=True)
+    return _get_track_embedding(track_id)
 
 
 @app.get("/artists/{artist_id}/embeddings")
 async def get_artist_embeddings(artist_id: int, include_tracks: bool = Query(default=True)) -> dict[str, Any]:
     init_db()
-    with _connect() as conn:
-        artist = _get_artist(conn, artist_id)
-        rows = conn.execute(
-            "SELECT * FROM tracks WHERE artist_id = ? AND embedding IS NOT NULL ORDER BY id",
-            (artist_id,),
-        ).fetchall()
-        vectors = [np.frombuffer(row["embedding"], dtype=np.float32) for row in rows]
-        average = aggregate_embeddings(vectors)
-        result: dict[str, Any] = {
-            "artist": _artist_response(artist),
-            "track_count": len(rows),
-            "average_embedding": average.astype(float).tolist() if average is not None else None,
-        }
-        if include_tracks:
-            result["tracks"] = [_track_response(row, include_embedding=True) for row in rows]
-        return result
+    return _get_artist_embeddings(artist_id, include_tracks=include_tracks)
+
+
+@app.post("/users")
+async def create_user(payload: dict[str, Any]) -> dict[str, Any]:
+    return _get_or_create_user(str(payload.get("username", "")))
+
+
+@app.get("/users/{username}")
+async def get_user_profile(username: str) -> dict[str, Any]:
+    return _get_user_profile(username)
+
+
+@app.post("/users/{username}/tracks")
+async def submit_user_track(username: str, payload: dict[str, Any]) -> dict[str, Any]:
+    track = _create_user_track(username, str(payload.get("url", "")))
+    job = await user_track_analysis_service.enqueue(int(track["id"]))
+    return {"track": track, "job": job.as_dict()}
+
+
+@app.get("/users/{username}/tracks")
+async def list_user_owned_tracks(username: str) -> list[dict[str, Any]]:
+    return _list_user_tracks(username)
+
+
+@app.get("/users/{username}/tracks/{user_track_id}/audio")
+async def get_user_track_audio(username: str, user_track_id: int) -> FileResponse:
+    track = _get_user_track_for_username(username, user_track_id)
+    path = track.get("path")
+    if not path or not Path(path).exists():
+        raise HTTPException(status_code=404, detail="cached audio not found")
+    return FileResponse(path, media_type="audio/mpeg")
+
+
+@app.get("/user-track-jobs/{job_id}")
+async def get_user_track_job(job_id: str) -> dict[str, Any]:
+    job = user_track_analysis_service.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="user track job not found")
+    return job
+
+
+@app.get("/visualization")
+async def get_visualization(username: str | None = None) -> dict[str, Any]:
+    if username:
+        _get_or_create_user(username)
+    points = _visualization_points(username)
+    return {
+        "username": username,
+        "points": points,
+        "point_count": len(points),
+        "base_point_count": sum(1 for point in points if point.get("kind") == "track"),
+        "user_point_count": sum(1 for point in points if point.get("kind") == "user_track"),
+        "has_cached_layout": _latest_layout_points(username) is not None,
+    }
+
+
+@app.post("/layouts/recompute")
+async def recompute_visualization_layout(payload: dict[str, Any]) -> dict[str, Any]:
+    job = await layout_service.enqueue(payload.get("username"))
+    return job.as_dict()
+
+
+@app.get("/layout-jobs/{job_id}")
+async def get_layout_job(job_id: str) -> dict[str, Any]:
+    job = layout_service.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="layout job not found")
+    return job
+
+
+@app.post("/shares")
+async def create_share(payload: dict[str, Any]) -> dict[str, Any]:
+    return _create_share(str(payload.get("username", "")), payload)
+
+
+@app.get("/shares/{token}")
+async def get_share(token: str) -> dict[str, Any]:
+    return _get_share(token)

@@ -1,6 +1,8 @@
 Usage Examples
 ==============
 
+The project is a Python library and API server. It does not install command-line entry points.
+
 Download From ``artist_links.json``
 -----------------------------------
 
@@ -14,11 +16,15 @@ Create or reuse a JSON file mapping artist names to SoundCloud track URLs:
      ]
    }
 
-Download up to three tracks per artist:
+Download up to three tracks per artist from Python:
 
-.. code-block:: bash
+.. code-block:: python
 
-   streetparade-embeddings --data-dir . download --num-links 3
+   from streetparade_embeddings.config import PipelineConfig
+   from streetparade_embeddings.pipeline import download_artist_tracks
+
+   config = PipelineConfig(data_dir=".", links_file="artist_links.json", max_tracks=3)
+   download_artist_tracks(config)
 
 The downloader stores files in the deterministic cache layout:
 
@@ -31,63 +37,61 @@ Download One Track URL
 
 Pass a direct SoundCloud track URL. The artist is inferred from the track metadata:
 
-.. code-block:: bash
+.. code-block:: python
 
-   streetparade-embeddings --data-dir . download \
-     --track-url "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul"
+   from streetparade_embeddings.config import PipelineConfig
+   from streetparade_embeddings.pipeline import download_single_track
+
+   config = PipelineConfig(data_dir=".")
+   result = download_single_track(
+       config,
+       "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul",
+   )
 
 Override the artist cache bucket if needed:
 
-.. code-block:: bash
+.. code-block:: python
 
-   streetparade-embeddings --data-dir . download \
-     --track-url "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul" \
-     --artist "Hilit Kolet"
+   result = download_single_track(
+       config,
+       "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul",
+       artist="Hilit Kolet",
+   )
 
 Download One YouTube Video As MP3
 ---------------------------------
 
 Pass a YouTube video URL. The channel or artist metadata is inferred with ``yt-dlp``:
 
-.. code-block:: bash
+.. code-block:: python
 
-   streetparade-embeddings --data-dir . youtube-download \
-     --url "https://www.youtube.com/watch?v=1Hx3PGeADmc"
+   from streetparade_embeddings.config import PipelineConfig
+   from streetparade_embeddings.pipeline import download_youtube_track
 
-The YouTube downloader is also available as a standalone module:
+   config = PipelineConfig(data_dir=".")
+   result = download_youtube_track(
+       config,
+       "https://www.youtube.com/watch?v=1Hx3PGeADmc",
+   )
 
-.. code-block:: bash
-
-   python -m streetparade_embeddings.youtube \
-     "https://www.youtube.com/watch?v=1Hx3PGeADmc"
-
-Override the cache bucket if needed:
-
-.. code-block:: bash
-
-   streetparade-embeddings --data-dir . youtube-download \
-     --url "https://www.youtube.com/watch?v=1Hx3PGeADmc" \
-     --artist "Artist Name"
+The file is stored under ``.songs_cache/youtube/<artist_hash>/<url_hash>.mp3``.
 
 Discover Tracks From Saved Street Parade HTML
 ---------------------------------------------
 
-When ``streetparade_data.html`` is available locally, discover track URLs for artists with SoundCloud pages. Use ``yt-dlp`` for the non-browser backend:
+When ``streetparade_data.html`` is available locally, discover track URLs for artists with SoundCloud pages and write ``artist_links.json``:
 
-.. code-block:: bash
+.. code-block:: python
 
-   streetparade-embeddings --data-dir . discover-tracks --method yt-dlp
+   from streetparade_embeddings.config import PipelineConfig
+   from streetparade_embeddings.pipeline import write_soundcloud_artist_links
+   from streetparade_embeddings.soundcloud import DiscoveryMethod
 
-The legacy rendered-page backend is still available:
+   config = PipelineConfig(data_dir=".", html_file="streetparade_data.html")
+   artist_links = write_soundcloud_artist_links(config, discovery_method=DiscoveryMethod.YT_DLP)
 
-.. code-block:: bash
-
-   streetparade-embeddings --data-dir . discover-tracks --method requests-html
-
-This writes ``artist_links.json`` under ``--data-dir`` unless ``--links-file`` points elsewhere.
-
-Select A SoundCloud Discovery Backend In Python
------------------------------------------------
+Select A SoundCloud Discovery Backend
+-------------------------------------
 
 Instantiate a discoverer with the backend you want to use:
 
@@ -110,50 +114,37 @@ Compute Embeddings
 
 Compute artist-level embeddings from cached downloads:
 
-.. code-block:: bash
+.. code-block:: python
 
-   streetparade-embeddings --data-dir . --device auto embed
+   from streetparade_embeddings.config import Device, PipelineConfig
+   from streetparade_embeddings.pipeline import compute_artist_embeddings, save_embedding_results
 
-Use CPU explicitly:
-
-.. code-block:: bash
-
-   streetparade-embeddings --data-dir . --device cpu embed
+   config = PipelineConfig(data_dir=".", device=Device.AUTO)
+   results = compute_artist_embeddings(config)
+   save_embedding_results(results, config.resolved_output_dir)
 
 Customize chunk and track limits:
 
-.. code-block:: bash
+.. code-block:: python
 
-   streetparade-embeddings --data-dir . \
-     --max-tracks 5 \
-     --max-chunks 12 \
-     --chunk-seconds 30 \
-     --chunk-stride-seconds 60 \
-     embed
+   config = PipelineConfig(
+       data_dir=".",
+       device=Device.CPU,
+       max_tracks=5,
+       max_chunks=12,
+       chunk_seconds=30,
+       chunk_stride_seconds=60,
+   )
+   results = compute_artist_embeddings(config)
 
 Run Download And Embedding Together
 -----------------------------------
 
 For an existing ``artist_links.json``:
 
-.. code-block:: bash
-
-   streetparade-embeddings --data-dir . --device auto run-all
-
-Python API Example
-------------------
-
 .. code-block:: python
 
-   from streetparade_embeddings.config import Device, PipelineConfig
-   from streetparade_embeddings.pipeline import download_single_track
-   from pathlib import Path
-
-   config = PipelineConfig(data_dir=Path("."), device=Device.AUTO)
-   result = download_single_track(
-       config,
-       "https://soundcloud.com/hilitkolet/hilit-kolet-i-want-your-soul",
-   )
-
-   print(result.artist)
-   print(result.path)
+   config = PipelineConfig(data_dir=".", device=Device.AUTO)
+   download_artist_tracks(config)
+   results = compute_artist_embeddings(config)
+   save_embedding_results(results, config.resolved_output_dir)

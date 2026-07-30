@@ -23,7 +23,7 @@ Pipeline Stages
    Save the Street Parade artist listing HTML as ``streetparade_data.html`` or prepare ``artist_links.json`` manually.
 
 2. Discover SoundCloud track URLs.
-   Use ``discover-tracks --method yt-dlp`` when starting from artist pages, use ``discover-tracks --method requests-html`` for the legacy browser-rendered backend, or edit ``artist_links.json`` directly.
+   Use :class:`streetparade_embeddings.soundcloud.SoundCloudTrackDiscoverer` with ``DiscoveryMethod.YT_DLP`` when starting from artist pages, use ``DiscoveryMethod.REQUESTS_HTML`` for the legacy browser-rendered backend, or edit ``artist_links.json`` directly.
 
 3. Download audio.
    Downloads are cached by stable hashes of artist name and track URL, so reruns skip existing files.
@@ -52,5 +52,5 @@ Reproducibility Notes
 
 * Keep ``artist_links.json`` under version control if the set of downloaded tracks matters for analysis.
 * Keep ``.songs_cache`` out of version control; it contains downloaded media.
-* Record the model name and CLI options used for any analysis result.
-* Prefer ``--device cpu`` for deterministic local debugging and ``--device cuda`` or ``--device auto`` for larger runs.
+* Record the model name and pipeline configuration used for any analysis result.
+* Prefer ``Device.CPU`` for deterministic local debugging and ``Device.CUDA`` or ``Device.AUTO`` for larger runs.

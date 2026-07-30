@@ -3,7 +3,6 @@ from streetparade_embeddings.models import MediaDownload, MediaSource
 from streetparade_embeddings.pipeline import download_youtube_track
 from streetparade_embeddings.soundcloud import stable_hash
 from streetparade_embeddings.youtube import youtube_cache_path
-from streetparade_embeddings.youtube import main as youtube_main
 
 
 def test_youtube_cache_path_uses_source_namespace(tmp_path):
@@ -31,24 +30,3 @@ def test_download_youtube_track_uses_pipeline_cache(monkeypatch, tmp_path):
     assert result.source is MediaSource.YOUTUBE
     assert result.artist == "Inferred Channel"
     assert result.title == "Example Title"
-
-
-def test_youtube_module_main_prints_download_result(monkeypatch, tmp_path, capsys):
-    url = "https://www.youtube.com/watch?v=abc123"
-    path = tmp_path / "youtube" / "track.mp3"
-
-    def fake_download_youtube_to_cache(video_url, cache_dir, artist=None):
-        assert video_url == url
-        assert cache_dir == str(tmp_path)
-        assert artist == "Example Channel"
-        return MediaDownload(MediaSource.YOUTUBE, "Example Channel", "Example Title", video_url, path, False)
-
-    monkeypatch.setattr("streetparade_embeddings.youtube.download_youtube_to_cache", fake_download_youtube_to_cache)
-
-    exit_code = youtube_main([url, "--cache-dir", str(tmp_path), "--artist", "Example Channel"])
-
-    output = capsys.readouterr().out
-    assert exit_code == 0
-    assert f"already cached: {path}" in output
-    assert "artist: Example Channel" in output
-    assert "title: Example Title" in output

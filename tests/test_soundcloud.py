@@ -72,7 +72,7 @@ def test_discover_track_urls_sync_accepts_method(monkeypatch):
     ]
 
 
-def test_discoverer_accepts_string_backend_for_cli_compatibility(monkeypatch):
+def test_discoverer_accepts_string_backend_alias(monkeypatch):
     monkeypatch.setattr(
         "streetparade_embeddings.soundcloud.discover_track_urls_ytdlp",
         lambda url: [f"{url}/track"],

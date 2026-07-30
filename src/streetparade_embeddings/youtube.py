@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import argparse
 from pathlib import Path
 
 from .models import MediaDownload, MediaSource
@@ -64,21 +62,3 @@ def _download_with_ytdlp(video_url: str, output_path: str | Path) -> None:
     with YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(video_url, download=True)
 
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Download a YouTube video as a cached MP3")
-    parser.add_argument("url", help="YouTube video URL")
-    parser.add_argument("--cache-dir", default=".songs_cache", help="Cache directory for downloaded MP3 files")
-    parser.add_argument("--artist", help="Optional cache bucket name; defaults to inferred metadata")
-    args = parser.parse_args(argv)
-
-    result = download_youtube_to_cache(args.url, args.cache_dir, artist=args.artist)
-    status = "downloaded" if result.downloaded else "already cached"
-    print(f"{status}: {result.path}")
-    print(f"artist: {result.artist}")
-    print(f"title: {result.title}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

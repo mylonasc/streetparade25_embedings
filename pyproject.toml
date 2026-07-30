@@ -9,12 +9,15 @@ description = "SoundCloud download and CLAP embedding pipeline for Street Parade
 requires-python = ">=3.10,<3.14"
 dependencies = [
   "beautifulsoup4",
+  "chromadb",
   "fastapi",
   "lxml[html-clean]>=6.1.1",
   "nest-asyncio>=1.6.0",
   "numpy",
   "pydub",
+  "PyYAML",
   "requests-html>=0.10.0",
+  "scikit-learn>=1.7.2",
   "soundcloud-lib",
   "torch",
   "transformers",
@@ -30,6 +33,7 @@ discovery = [
 notebooks = [
   "datasets",
   "matplotlib",
+  "pandas",
   "tqdm",
 ]
 dev = [
@@ -39,10 +43,8 @@ docs = [
   "myst-parser",
   "sphinx",
   "sphinx-autodoc-typehints",
+  "sphinxcontrib-plantuml",
 ]
-
-[project.scripts]
-streetparade-embeddings = "streetparade_embeddings.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
