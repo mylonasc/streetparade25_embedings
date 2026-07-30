@@ -3,9 +3,30 @@ import { createRoot } from 'react-dom/client';
 import * as d3 from 'd3';
 import './styles.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = resolveApiBaseUrl();
 const USERNAME_KEY = 'streetparade.visualizer.username';
 const MARKS_KEY = 'streetparade.visualizer.marked';
+
+function resolveApiBaseUrl() {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  const browserHost = window.location.hostname;
+  if (configured && !(isLoopbackUrl(configured) && !isLoopbackHost(browserHost))) {
+    return configured.replace(/\/$/, '');
+  }
+  return `${window.location.protocol}//${browserHost}:8000`;
+}
+
+function isLoopbackUrl(value) {
+  try {
+    return isLoopbackHost(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackHost(hostname) {
+  return ['localhost', '127.0.0.1', '::1'].includes(hostname);
+}
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -39,7 +60,7 @@ function App() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [shareUrl, setShareUrl] = useState('');
-  const [stats, setStats] = useState({point_count: 0, base_point_count: 0, user_point_count: 0});
+  const [stats, setStats] = useState({point_count: 0, base_point_count: 0, artist_point_count: 0, user_point_count: 0});
 
   async function loadAll(activeUsername = username) {
     if (!activeUsername) return;
@@ -51,6 +72,7 @@ function App() {
     setStats({
       point_count: viz.point_count || 0,
       base_point_count: viz.base_point_count || 0,
+      artist_point_count: viz.artist_point_count || 0,
       user_point_count: viz.user_point_count || 0,
     });
     setUserTracks(tracks || []);
@@ -117,6 +139,20 @@ function App() {
     setMarks(next);
   }
 
+  function selectUserTrack(track) {
+    const pointId = `user-track-${track.id}`;
+    const point = points.find((candidate) => candidate.id === pointId) || {
+      id: pointId,
+      kind: 'user_track',
+      label: track.title || track.source_url,
+      x: track.x || 0,
+      y: track.y || 0,
+      cluster: -1,
+      metadata: track,
+    };
+    setSelected(point);
+  }
+
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get('share');
     if (!token) return;
@@ -179,8 +215,10 @@ function App() {
         <section className="map-card">
           <div className="map-status">
             <strong>{stats.base_point_count}</strong> Street Parade songs
+            <span><strong>{stats.artist_point_count}</strong> artists</span>
             <span><strong>{stats.user_point_count}</strong> user-added songs</span>
           </div>
+          <div className="zoom-hint">Scroll to zoom · drag to pan · double-click to reset</div>
           {stats.base_point_count === 0 && (
             <div className="empty-warning">
               No Street Parade vectors loaded. Check that the API can access the Chroma vector store, especially `./chroma` when using Docker.
@@ -202,7 +240,16 @@ function App() {
 
           <section className="panel">
             <h2>My songs</h2>
-            <div className="song-list">{userTracks.map((track) => <TrackRow key={track.id} track={track} />)}</div>
+            <div className="song-list">
+              {userTracks.map((track) => (
+                <TrackRow
+                  key={track.id}
+                  track={track}
+                  active={selected?.id === `user-track-${track.id}`}
+                  onSelect={() => selectUserTrack(track)}
+                />
+              ))}
+            </div>
             {!userTracks.length && <p className="muted">No submitted songs yet.</p>}
           </section>
 
@@ -236,6 +283,7 @@ function UsernameGate({draftUsername, setDraftUsername, saveUsername, error}) {
 function Visualizer({points, selected, setSelected, marks}) {
   const ref = useRef(null);
   const tooltipRef = useRef(null);
+  const transformRef = useRef(d3.zoomIdentity);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -250,12 +298,38 @@ function Visualizer({points, selected, setSelected, marks}) {
     const x = d3.scaleLinear().domain(d3.extent(points, (point) => point.x)).nice().range([36, width - 36]);
     const y = d3.scaleLinear().domain(d3.extent(points, (point) => point.y)).nice().range([height - 36, 36]);
     const color = d3.scaleOrdinal(d3.schemeTableau10.concat(d3.schemeSet3));
-    svg.append('g').selectAll('path').data(points).join('path')
-      .attr('class', (point) => `point ${point.kind} ${isMarked(point, marks) ? 'marked' : ''}`)
+    const viewport = svg.append('g').attr('class', 'zoom-layer').attr('transform', transformRef.current);
+    const zoom = d3.zoom()
+      .scaleExtent([0.45, 18])
+      .on('zoom', (event) => {
+        transformRef.current = event.transform;
+        viewport.attr('transform', event.transform);
+      });
+    svg.call(zoom).on('dblclick.zoom', null);
+    svg.on('dblclick', () => {
+      transformRef.current = d3.zoomIdentity;
+      svg.transition().duration(220).call(zoom.transform, d3.zoomIdentity);
+    });
+    svg.call(zoom.transform, transformRef.current);
+
+    viewport.selectAll('path').data(points).join('path')
+      .attr('class', (point) => `point ${point.kind} ${selected?.id === point.id ? 'selected' : ''} ${isMarked(point, marks) ? 'marked' : ''}`)
       .attr('transform', (point) => `translate(${x(point.x)},${y(point.y)})`)
-      .attr('d', d3.symbol().type((point) => point.kind === 'user_track' ? d3.symbolStar : d3.symbolCircle).size((point) => point.kind === 'user_track' ? 150 : 58))
-      .attr('fill', (point) => point.kind === 'user_track' ? '#ff5c35' : color(point.cluster))
-      .attr('stroke-width', (point) => selected?.id === point.id ? 3 : 1.2)
+      .attr('d', d3.symbol().type((point) => {
+        if (point.kind === 'user_track') return d3.symbolStar;
+        if (point.kind === 'artist') return d3.symbolDiamond;
+        return d3.symbolCircle;
+      }).size((point) => {
+        if (point.kind === 'user_track') return selected?.id === point.id ? 280 : 180;
+        if (point.kind === 'artist') return selected?.id === point.id ? 180 : 120;
+        return selected?.id === point.id ? 105 : 58;
+      }))
+      .attr('fill', (point) => {
+        if (point.kind === 'user_track') return '#ff5c35';
+        if (point.kind === 'artist') return '#85f5c4';
+        return color(point.cluster);
+      })
+      .attr('stroke-width', (point) => selected?.id === point.id ? 4 : 1.2)
       .on('mouseenter', (event, point) => {
         const tooltip = tooltipRef.current;
         tooltip.hidden = false;
@@ -268,7 +342,10 @@ function Visualizer({points, selected, setSelected, marks}) {
         tooltipRef.current.style.top = `${event.pageY + 14}px`;
       })
       .on('mouseleave', () => { tooltipRef.current.hidden = true; })
-      .on('click', (_, point) => setSelected(point));
+      .on('click', (event, point) => {
+        event.stopPropagation();
+        setSelected(point);
+      });
   }, [points, selected, marks]);
 
   return <><svg ref={ref} className="plot" /><div ref={tooltipRef} className="tooltip" hidden /></>;
@@ -276,25 +353,121 @@ function Visualizer({points, selected, setSelected, marks}) {
 
 function Selection({point, onMark}) {
   const metadata = point.metadata || {};
-  const sourceUrl = metadata.url || metadata.source_url;
-  const soundcloud = sourceUrl && sourceUrl.includes('soundcloud.com') ? sourceUrl : null;
-  const local = point.kind === 'user_track' && metadata.source_type === 'youtube' && metadata.username
-    ? `${API_BASE_URL}/users/${encodeURIComponent(metadata.username)}/tracks/${metadata.id}/audio`
-    : null;
+  const playlist = playlistForPoint(point);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeTrack = playlist[activeIndex] || null;
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [point.id]);
+
   return (
     <div>
       <p className="eyebrow">{point.kind}</p>
       <h3>{point.label}</h3>
       <button onClick={onMark}>Toggle preference mark</button>
-      {soundcloud && <iframe title="SoundCloud" width="100%" height="166" scrolling="no" frameBorder="no" allow="autoplay" src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(soundcloud)}&auto_play=true&show_artwork=false&visual=false`} />}
-      {local && <audio src={local} controls autoPlay />}
+      {activeTrack?.soundcloudUrl && <SoundCloudPlayer key={activeTrack.soundcloudUrl} url={activeTrack.soundcloudUrl} />}
+      {activeTrack?.localUrl && <audio key={activeTrack.localUrl} src={activeTrack.localUrl} controls autoPlay />}
+      {point.kind === 'artist' && (
+        <div className="playlist">
+          <div className="playlist-header">Artist playlist · {playlist.length} songs</div>
+          {playlist.map((track, index) => (
+            <button
+              type="button"
+              className={`playlist-track ${index === activeIndex ? 'active' : ''}`}
+              key={`${track.title}-${track.soundcloudUrl || track.localUrl || index}`}
+              onClick={() => setActiveIndex(index)}
+            >
+              <span>{index + 1}</span>
+              <strong>{track.title}</strong>
+            </button>
+          ))}
+        </div>
+      )}
       <dl>{Object.entries(metadata).filter(([, value]) => value !== null && value !== undefined && typeof value !== 'object').map(([key, value]) => <React.Fragment key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{String(value)}</dd></React.Fragment>)}</dl>
     </div>
   );
 }
 
-function TrackRow({track}) {
-  return <div className="track-row"><strong>{track.title || track.source_url}</strong><span>{track.source_type} · {track.status}</span>{track.last_error && <small>{track.last_error}</small>}</div>;
+function SoundCloudPlayer({url}) {
+  const iframeRef = useRef(null);
+  const widgetRef = useRef(null);
+  const [needsTap, setNeedsTap] = useState(false);
+
+  useEffect(() => {
+    setNeedsTap(false);
+    widgetRef.current = null;
+    const iframe = iframeRef.current;
+    if (!iframe || !window.SC?.Widget) {
+      setNeedsTap(true);
+      return;
+    }
+    const widget = window.SC.Widget(iframe);
+    widgetRef.current = widget;
+    widget.bind(window.SC.Widget.Events.READY, () => {
+      widget.play(() => setNeedsTap(false));
+      window.setTimeout(() => {
+        widget.isPaused((paused) => setNeedsTap(Boolean(paused)));
+      }, 700);
+    });
+  }, [url]);
+
+  function playInPage() {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    widget.play(() => setNeedsTap(false));
+  }
+
+  return (
+    <div className="soundcloud-player">
+      <iframe
+        ref={iframeRef}
+        title="SoundCloud"
+        width="100%"
+        height="166"
+        scrolling="no"
+        frameBorder="no"
+        allow="autoplay"
+        src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=false&show_artwork=false&visual=false&buying=false&sharing=false&download=false&show_comments=false`}
+      />
+      {needsTap && (
+        <button type="button" className="inline-play" onClick={playInPage}>
+          Tap to play embedded track
+        </button>
+      )}
+    </div>
+  );
+}
+
+function playlistForPoint(point) {
+  const metadata = point.metadata || {};
+  if (point.kind === 'artist') {
+    return (metadata.tracks || [])
+      .map((track) => playlistTrack(track.title || track.label || `Track ${track.track_id || ''}`, track.url, null))
+      .filter(Boolean);
+  }
+  const sourceUrl = metadata.url || metadata.source_url;
+  const localUrl = point.kind === 'user_track' && metadata.source_type === 'youtube' && metadata.username
+    ? `${API_BASE_URL}/users/${encodeURIComponent(metadata.username)}/tracks/${metadata.id}/audio`
+    : null;
+  return [playlistTrack(metadata.title || point.label, sourceUrl, localUrl)].filter(Boolean);
+}
+
+function playlistTrack(title, sourceUrl, localUrl) {
+  const soundcloudUrl = sourceUrl && sourceUrl.includes('soundcloud.com') ? sourceUrl : null;
+  if (!soundcloudUrl && !localUrl) return null;
+  return {title: title || 'Untitled track', soundcloudUrl, localUrl};
+}
+
+function TrackRow({track, active, onSelect}) {
+  return (
+    <button type="button" className={`track-row ${active ? 'active' : ''}`} onClick={onSelect}>
+      <span className="track-star">★</span>
+      <strong>{track.title || track.source_url}</strong>
+      <span>{track.source_type} · {track.status}</span>
+      {track.last_error && <small>{track.last_error}</small>}
+    </button>
+  );
 }
 
 function isMarked(point, marks) {

@@ -76,6 +76,13 @@ def _cors_origins() -> list[str]:
     )
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
+
+def _cors_origin_regex() -> str | None:
+    return os.environ.get(
+        "STREETPARADE_CORS_ORIGIN_REGEX",
+        r"https?://(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?",
+    )
+
 class LazyClapEmbeddingService:
     """Owns one lazily-loaded CLAP model and an async embedding job queue."""
 
@@ -487,6 +494,7 @@ app = FastAPI(title="Street Parade Embeddings API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -677,6 +685,7 @@ async def get_visualization(username: str | None = None) -> dict[str, Any]:
         "points": points,
         "point_count": len(points),
         "base_point_count": sum(1 for point in points if point.get("kind") == "track"),
+        "artist_point_count": sum(1 for point in points if point.get("kind") == "artist"),
         "user_point_count": sum(1 for point in points if point.get("kind") == "user_track"),
         "has_cached_layout": _latest_layout_points(username) is not None,
     }

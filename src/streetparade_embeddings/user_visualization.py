@@ -330,12 +330,11 @@ def latest_layout_points(username: str | None = None) -> list[dict[str, Any]] | 
 
 def visualization_points(username: str | None = None) -> list[dict[str, Any]]:
     points = latest_layout_points(username)
-    if points is not None:
-        return points
-    base = base_embedding_points()
-    if not username:
-        return base
-    return base + user_points(username)
+    if points is None:
+        points = base_embedding_points()
+    if username:
+        points = merge_current_user_points(points, username)
+    return add_artist_points(points)
 
 
 def base_embedding_points() -> list[dict[str, Any]]:
@@ -350,17 +349,68 @@ def base_embedding_points() -> list[dict[str, Any]]:
     return points
 
 
+def add_artist_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    without_old_artists = [point for point in points if point.get("kind") != "artist"]
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for point in without_old_artists:
+        if point.get("kind") != "track":
+            continue
+        artist_name = (point.get("metadata") or {}).get("artist_name")
+        if artist_name:
+            grouped.setdefault(str(artist_name), []).append(point)
+
+    artist_points = []
+    for artist_name, artist_tracks in grouped.items():
+        clusters = [int(point.get("cluster", 0)) for point in artist_tracks]
+        cluster = max(set(clusters), key=clusters.count) if clusters else 0
+        artist_points.append(
+            {
+                "id": f"artist-{slugify(artist_name)}",
+                "kind": "artist",
+                "label": artist_name,
+                "x": float(np.mean([point["x"] for point in artist_tracks])),
+                "y": float(np.mean([point["y"] for point in artist_tracks])),
+                "cluster": cluster,
+                "metadata": {
+                    "artist_name": artist_name,
+                    "track_count": len(artist_tracks),
+                    "tracks": [
+                        {
+                            "id": track["id"],
+                            "label": track["label"],
+                            "title": (track.get("metadata") or {}).get("title"),
+                            "url": (track.get("metadata") or {}).get("url"),
+                            "track_id": (track.get("metadata") or {}).get("track_id"),
+                        }
+                        for track in artist_tracks
+                    ],
+                },
+            }
+        )
+    return without_old_artists + artist_points
+
+
+def merge_current_user_points(points: list[dict[str, Any]], username: str) -> list[dict[str, Any]]:
+    current = {point["id"]: point for point in user_points(username)}
+    merged = []
+    seen = set()
+    for point in points:
+        if point.get("kind") == "user_track":
+            replacement = current.get(point["id"])
+            if replacement is not None:
+                merged.append(replacement)
+                seen.add(point["id"])
+            continue
+        merged.append(point)
+    for point_id, point in current.items():
+        if point_id not in seen:
+            merged.append(point)
+    return merged
+
+
 def user_points(username: str) -> list[dict[str, Any]]:
     return [
-        {
-            "id": f"user-track-{track['id']}",
-            "kind": "user_track",
-            "label": track.get("title") or title_from_url(track["source_url"]),
-            "x": track.get("x") or 0.0,
-            "y": track.get("y") or 0.0,
-            "cluster": -1,
-            "metadata": track,
-        }
+        user_point_from_track(track)
         for track in list_user_tracks(username)
         if track.get("status") == "completed"
     ]
@@ -376,7 +426,17 @@ def recompute_layout(username: str | None = None) -> list[dict[str, Any]]:
     if not pairs:
         return []
     projection, clusters = project_and_cluster([vector for _, vector in pairs])
-    return [track_point(row, float(projection[idx, 0]), float(projection[idx, 1]), int(clusters[idx])) for idx, (row, _) in enumerate(pairs)]
+    user_track_map = user_tracks_by_track_id(username) if username else {}
+    points = []
+    for idx, (row, _) in enumerate(pairs):
+        x = float(projection[idx, 0])
+        y = float(projection[idx, 1])
+        cluster = int(clusters[idx])
+        if is_user_artist(row.get("artist_name")) and int(row["track_id"]) in user_track_map:
+            points.append(user_point_from_track(user_track_map[int(row["track_id"])], x, y, cluster, placement_method="tsne_recomputed"))
+        else:
+            points.append(track_point(row, x, y, cluster))
+    return points
 
 
 def save_layout_job(job: LayoutJob, points: list[dict[str, Any]] | None = None) -> None:
@@ -467,6 +527,10 @@ def user_track_ids(username: str) -> set[int]:
     return {int(track["track_id"]) for track in list_user_tracks(username) if track.get("track_id") is not None}
 
 
+def user_tracks_by_track_id(username: str) -> dict[int, dict[str, Any]]:
+    return {int(track["track_id"]): track for track in list_user_tracks(username) if track.get("track_id") is not None}
+
+
 def vectors_for_rows(rows: list[dict[str, Any]]) -> dict[str, np.ndarray]:
     store = get_vector_store()
     vectors = {}
@@ -502,8 +566,10 @@ def project_and_cluster(vectors: list[np.ndarray]) -> tuple[np.ndarray, np.ndarr
     if len(vectors) == 1:
         return np.zeros((1, 2), dtype=np.float32), np.zeros(1, dtype=int)
     x = np.vstack(vectors)
-    perplexity = min(30.0, max(1.0, (len(vectors) - 1) / 3.0), len(vectors) - 1e-3)
-    projection = TSNE(n_components=2, perplexity=perplexity, metric="euclidean", init="random", learning_rate="auto", random_state=42).fit_transform(x)
+    # perplexity = min(30.0, max(1.0, (len(vectors) - 1) / 3.0), len(vectors) - 1e-3)
+    # projection = TSNE(n_components=2, perplexity=perplexity, metric="euclidean", init="random", learning_rate="auto", random_state=42).fit_transform(x)
+    projection = TSNE(n_components=2, random_state=123456).fit_transform(x)
+            
     cluster_count = min(max(2, round(math.sqrt(len(vectors) / 2))), 12, len(vectors) - 1)
     if cluster_count <= 1:
         clusters = np.zeros(len(vectors), dtype=int)
@@ -531,6 +597,29 @@ def track_point(row: dict[str, Any], x: float, y: float, cluster: int) -> dict[s
             "embedding_model": row.get("embedding_model"),
         },
     }
+
+
+def user_point_from_track(
+    track: dict[str, Any],
+    x: float | None = None,
+    y: float | None = None,
+    cluster: int = -1,
+    placement_method: str | None = None,
+) -> dict[str, Any]:
+    method = placement_method or track.get("placement_method")
+    return {
+        "id": f"user-track-{track['id']}",
+        "kind": "user_track",
+        "label": track.get("title") or title_from_url(track["source_url"]),
+        "x": float(x if x is not None else track.get("x") or 0.0),
+        "y": float(y if y is not None else track.get("y") or 0.0),
+        "cluster": int(cluster),
+        "metadata": {**track, "placement_method": method},
+    }
+
+
+def slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "artist"
 
 
 def title_from_url(url: str | None) -> str:
