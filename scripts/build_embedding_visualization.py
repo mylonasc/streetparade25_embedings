@@ -7,10 +7,10 @@ import re
 import shutil
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import numpy as np
 from sklearn.cluster import SpectralClustering
@@ -126,6 +126,7 @@ def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: s
             "embedding_dim": row["embedding_dim"],
             "embedded_at": row["embedded_at"],
         }
+        metadata["soundcloud_embed_url"] = soundcloud_embed_url(metadata["url"])
         track_points.append(
             EmbeddingPoint(
                 id=f"track-{row['track_id']}",
@@ -143,6 +144,7 @@ def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: s
                 "title": title,
                 "artist_name": artist_name,
                 "url": row["url"],
+                "soundcloud_embed_url": soundcloud_embed_url(row["url"]),
                 "path": row["path"],
             }
         )
@@ -158,6 +160,7 @@ def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: s
                 "socials": json_data(row["socials"], []),
                 "bio": row["bio"],
                 "soundcloud_url": row["soundcloud_url"],
+                "soundcloud_embed_url": soundcloud_embed_url(row["soundcloud_url"]),
                 "instagram": row["instagram"],
                 "youtube": row["youtube"],
                 "web": row["web"],
@@ -255,6 +258,18 @@ def humanize_slug(value: str) -> str | None:
     return " ".join(part.capitalize() for part in cleaned.split())
 
 
+def soundcloud_embed_url(url: str | None) -> str | None:
+    if not url or not re.match(r"^https?://(www\.)?soundcloud\.com/", url, re.IGNORECASE):
+        return None
+    return (
+        "https://w.soundcloud.com/player/"
+        f"?url={quote(url, safe='')}"
+        "&auto_play=true"
+        "&show_artwork=false"
+        "&visual=false"
+    )
+
+
 def build_projection(points: list[EmbeddingPoint], perplexity: float | None, random_state: int) -> np.ndarray:
     if len(points) == 0:
         raise ValueError("no embeddings found")
@@ -307,7 +322,7 @@ def write_site(points: list[EmbeddingPoint], projection: np.ndarray, clusters: n
     if args.playback == "local" and args.audio_assets != "none":
         export_audio_assets(points, args.out, args.db, args.audio_assets)
     data = {
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": {
             "db": str(args.db),
             "chroma_dir": str(args.chroma_dir),
@@ -606,23 +621,47 @@ function playableTracksForPoint(point) {
 function soundCloudTracksForPoint(point) {
   const metadata = point.metadata || {};
   if (point.kind === 'track') {
-    return isSoundCloudUrl(metadata.url) ? [{title: metadata.title || point.label, url: metadata.url}] : [];
+    return isSoundCloudUrl(metadata.url)
+      ? [{title: metadata.title || point.label, url: metadata.url, embed_url: metadata.soundcloud_embed_url || soundCloudEmbedUrl(metadata.url)}]
+      : [];
   }
   const tracks = (metadata.tracks || [])
     .filter((track) => isSoundCloudUrl(track.url))
-    .map((track) => ({title: track.title || `Track ${track.track_id}`, url: track.url}));
+    .map((track) => ({
+      title: track.title || `Track ${track.track_id}`,
+      url: track.url,
+      embed_url: track.soundcloud_embed_url || soundCloudEmbedUrl(track.url),
+    }));
   if (tracks.length) return tracks;
-  return isSoundCloudUrl(metadata.soundcloud_url) ? [{title: metadata.artist_name || point.label, url: metadata.soundcloud_url}] : [];
+  return isSoundCloudUrl(metadata.soundcloud_url)
+    ? [{
+        title: metadata.artist_name || point.label,
+        url: metadata.soundcloud_url,
+        embed_url: metadata.soundcloud_embed_url || soundCloudEmbedUrl(metadata.soundcloud_url),
+      }]
+    : [];
 }
 
 function isSoundCloudUrl(url) {
   return typeof url === 'string' && /^https?:\/\/(www\.)?soundcloud\.com\//i.test(url);
 }
 
-function renderSoundCloudPlayer(url) {
+function soundCloudEmbedUrl(url) {
+  return isSoundCloudUrl(url)
+    ? `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=true&show_artwork=false&visual=false`
+    : null;
+}
+
+function renderSoundCloudPlayer(track) {
+  if (!track) return;
   player.pause();
   playlist = [];
   const slot = details.select('#soundcloud-slot');
+  const embedUrl = track.embed_url || soundCloudEmbedUrl(track.url);
+  if (!embedUrl) {
+    slot.html('<p>No SoundCloud embed URL is available for this track.</p>');
+    return;
+  }
   slot.html(`
     <iframe
       title="SoundCloud player"
@@ -631,7 +670,7 @@ function renderSoundCloudPlayer(url) {
       scrolling="no"
       frameborder="no"
       allow="autoplay"
-      src="https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=true&show_artwork=false&visual=false">
+      src="${escapeAttr(embedUrl)}">
     </iframe>
   `);
   const iframe = slot.select('iframe').node();
@@ -657,7 +696,7 @@ function playPoint(point) {
 
 function playSoundCloudTracks(tracks, startIndex) {
   const track = tracks[startIndex];
-  if (track) renderSoundCloudPlayer(track.url);
+  if (track) renderSoundCloudPlayer(track);
 }
 
 function playTracks(tracks, startIndex) {

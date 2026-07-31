@@ -185,18 +185,36 @@ Generate a SoundCloud-player version instead:
 uv run python scripts/build_embedding_visualization.py \
   --db streetparade_embeddings.sqlite3 \
   --chroma-dir chroma \
-  --out outputs/embedding_visualization_soundcloud \
+  --out site \
   --playback soundcloud \
+  --audio-assets none \
   --start-fraction 0.5
 ```
 
-The script reads the latest track vectors from ChromaDB, computes artist-average points, projects all points to 2D with t-SNE, clusters the original full-dimensional vectors with spectral clustering, exposes cached songs under `audio/`, and writes `index.html`, `app.js`, `styles.css`, and `data.json`. Serve the site with the range-aware helper so browser audio seeking works reliably:
+The script reads the latest track vectors from ChromaDB, computes artist-average points, projects all points to 2D with t-SNE, clusters the original full-dimensional vectors with spectral clustering, and writes `index.html`, `app.js`, `styles.css`, and `data.json`. Local playback exposes cached songs under `audio/`, while SoundCloud playback uses canonical `w.soundcloud.com/player` embed URLs derived from the stored track URLs. Serve the site with the range-aware helper so browser audio seeking works reliably:
 
 ```bash
 uv run python scripts/serve_embedding_visualization.py --directory outputs/embedding_visualization --port 8080
 ```
 
 Useful options include `--clusters N`, `--perplexity N`, `--tracks-only`, `--model MODEL_NAME`, `--playback local|soundcloud`, `--start-fraction 0.5`, `--start-seconds N`, and `--audio-assets symlink|copy|none`. Artist marks are saved in browser `localStorage`. Local playback uses cached files from disk, while SoundCloud playback auto-loads an embedded SoundCloud player for stored SoundCloud URLs.
+
+## GitHub Pages
+
+The repository includes `.github/workflows/deploy-embedding-visualization.yml`, which rebuilds the static visualization into `site/` on every push to `main` and deploys it with GitHub Pages.
+
+Before enabling the workflow, make sure the repository also contains the Chroma persistence directory expected by the build command:
+
+```bash
+python scripts/build_embedding_visualization.py \
+  --db streetparade_embeddings.sqlite3 \
+  --chroma-dir chroma \
+  --out site \
+  --playback soundcloud \
+  --audio-assets none
+```
+
+Then enable GitHub Pages in the repository settings with `Build and deployment` set to `GitHub Actions`.
 
 ## Code Layout
 
