@@ -1,65 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as d3 from 'd3';
+import {request} from './api.js';
+import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalNumber} from './layoutOptions.js';
+import {buildSearchIndex, searchResults} from './search.js';
+import {isMarked, markKey, modelSummary, playlistForPoint, preferenceKeyForPoint, preferenceTarget, visibleMetadataEntries} from './selection.js';
+import {MARKS_KEY, USERNAME_KEY, readMarks} from './storage.js';
 import './styles.css';
-
-const API_BASE_URL = resolveApiBaseUrl();
-const USERNAME_KEY = 'streetparade.visualizer.username';
-const MARKS_KEY = 'streetparade.visualizer.marked';
-const DEFAULT_LAYOUT_OPTIONS = {
-  pcaEnabled: false,
-  pcaComponents: '10',
-  tsneInput: 'raw',
-  clusterCount: '',
-  clusterInput: 'raw',
-  tsnePerplexity: '',
-  tsneLearningRate: 'auto',
-  tsneMetric: 'cosine',
-  randomState: '42',
-  linkedTrackCount: '5',
-  similarityThreshold: '0.3',
-  similarityMetric: 'cosine',
-};
-
-function resolveApiBaseUrl() {
-  const configured = import.meta.env.VITE_API_BASE_URL;
-  const browserHost = window.location.hostname;
-  if (configured && !(isLoopbackUrl(configured) && !isLoopbackHost(browserHost))) {
-    return configured.replace(/\/$/, '');
-  }
-  return `${window.location.protocol}//${browserHost}:8000`;
-}
-
-function isLoopbackUrl(value) {
-  try {
-    return isLoopbackHost(new URL(value).hostname);
-  } catch {
-    return false;
-  }
-}
-
-function isLoopbackHost(hostname) {
-  return ['localhost', '127.0.0.1', '::1'].includes(hostname);
-}
-
-async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {'Content-Type': 'application/json', ...(options.headers || {})},
-    ...options,
-  });
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!response.ok) throw new Error(data?.detail || response.statusText);
-  return data;
-}
-
-function readMarks() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(MARKS_KEY) || '[]'));
-  } catch {
-    return new Set();
-  }
-}
 
 function App() {
   const [username, setUsername] = useState(localStorage.getItem(USERNAME_KEY) || '');
@@ -88,12 +35,15 @@ function App() {
   const [showSongs, setShowSongs] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [focusRequest, setFocusRequest] = useState(null);
+  const [selectionMinimized, setSelectionMinimized] = useState(false);
+  const [thumbPreferences, setThumbPreferences] = useState({});
 
   async function loadAll(activeUsername = username) {
     if (!activeUsername) return;
-    const [viz, tracks] = await Promise.all([
+    const [viz, tracks, preferences] = await Promise.all([
       request(`/visualization?username=${encodeURIComponent(activeUsername)}`),
       request(`/users/${encodeURIComponent(activeUsername)}/tracks`),
+      request(`/users/${encodeURIComponent(activeUsername)}/preferences`),
     ]);
     setPoints(viz.points || []);
     setStats({
@@ -103,6 +53,7 @@ function App() {
       user_point_count: viz.user_point_count || 0,
     });
     setUserTracks(tracks || []);
+    setThumbPreferences(preferences.preferences || {});
   }
 
   async function saveUsername(event) {
@@ -160,12 +111,35 @@ function App() {
   }
 
   function toggleMark(point) {
-    const key = `${point.kind}:${point.metadata?.artist_name || point.metadata?.artist || point.label}`;
+    const key = markKey(point);
     const next = new Set(marks);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     localStorage.setItem(MARKS_KEY, JSON.stringify(Array.from(next)));
     setMarks(next);
+  }
+
+  async function toggleThumb(point, value) {
+    const target = preferenceTarget(point);
+    const key = preferenceKeyForPoint(point);
+    if (!target || !key || !username) return;
+    const nextValue = thumbPreferences[key] === value ? null : value;
+    setThumbPreferences((existing) => {
+      const next = {...existing};
+      if (nextValue) next[key] = nextValue;
+      else delete next[key];
+      return next;
+    });
+    try {
+      const response = await request(`/users/${encodeURIComponent(username)}/preferences/events`, {
+        method: 'POST',
+        body: JSON.stringify({...target, value: nextValue || 'clear'}),
+      });
+      setThumbPreferences(response.current || {});
+    } catch (err) {
+      setError(err.message);
+      await loadAll();
+    }
   }
 
   function resolveSelection(point) {
@@ -225,6 +199,30 @@ function App() {
       metadata: track,
     };
     selectPoint(point);
+  }
+
+  function handleSelectionSheetPointerDown(event) {
+    if (event.target?.closest?.('button')) return;
+    const target = event.currentTarget;
+    const startY = event.clientY;
+    target.setPointerCapture?.(event.pointerId);
+
+    function handlePointerUp(nextEvent) {
+      const deltaY = nextEvent.clientY - startY;
+      if (Math.abs(deltaY) > 34) setSelectionMinimized(deltaY > 0);
+      target.removeEventListener('pointerup', handlePointerUp);
+      target.removeEventListener('pointercancel', handlePointerCancel);
+      target.releasePointerCapture?.(event.pointerId);
+    }
+
+    function handlePointerCancel() {
+      target.removeEventListener('pointerup', handlePointerUp);
+      target.removeEventListener('pointercancel', handlePointerCancel);
+      target.releasePointerCapture?.(event.pointerId);
+    }
+
+    target.addEventListener('pointerup', handlePointerUp);
+    target.addEventListener('pointercancel', handlePointerCancel);
   }
 
   useEffect(() => {
@@ -341,6 +339,16 @@ function App() {
 
   return (
     <main className="shell">
+      <header className="app-bar">
+        <div>
+          <p className="eyebrow">Street Parade map</p>
+          <h1>Embedding visualizer</h1>
+        </div>
+        <div className="app-stats" aria-label="Map statistics">
+          <span>{stats.point_count} points</span>
+          <span>{stats.user_point_count} uploads</span>
+        </div>
+      </header>
       {(message || error) && <section className={`notice ${error ? 'error' : 'success'}`}>{error || message}</section>}
 
       <section className="workspace">
@@ -366,7 +374,7 @@ function App() {
               )}
             </div>
             <div className="map-toolbar">
-              <button type="button" className="secondary" onClick={resetSelection} disabled={!selected}>Reset selection</button>
+              <button type="button" className="secondary toolbar-text-button" onClick={resetSelection} disabled={!selected}>Reset</button>
               <button type="button" className="secondary icon-button" aria-label="Undo selection" onClick={undoSelection} disabled={!selectionUndoStack.length}>↶</button>
               <button type="button" className="secondary icon-button" aria-label="Redo selection" onClick={redoSelection} disabled={!selectionRedoStack.length}>↷</button>
               <button type="button" className="secondary icon-button" aria-label="Toggle preference mark" onClick={() => selected && toggleMark(selected)} disabled={!selected}>★</button>
@@ -379,12 +387,25 @@ function App() {
                 No Street Parade vectors loaded. Check that the API can access the Chroma vector store, especially `./chroma` when using Docker.
               </div>
             )}
-            <Visualizer points={points} selected={selected} setSelected={selectPoint} marks={marks} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onPlaySimilar={() => similarityEdges[0]?.target && selectPoint(points.find((point) => point.id === similarityEdges[0].target), {focus: true})} onRandomSong={() => selectRandomSong(true)} />
+            <Visualizer points={points} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
           </section>
 
-          <section className="panel selection-panel">
-            <h2>Selection</h2>
-            {(selected || playbackPoint) ? <Selection point={selected || playbackPoint} onMark={() => toggleMark(selected || playbackPoint)} onUndo={undoSelection} onRedo={redoSelection} canUndo={selectionUndoStack.length > 0} canRedo={selectionRedoStack.length > 0} onSelectCluster={() => setSelectedCluster((selected || playbackPoint).cluster)} isFocused={Boolean(selected)} /> : <p className="muted">Click a point on the map.</p>}
+          <section className={`panel selection-panel ${(selected || playbackPoint) ? 'has-selection' : ''} ${selectionMinimized ? 'is-minimized' : ''}`} aria-live="polite">
+            <div className="sheet-grip" aria-hidden="true" onPointerDown={handleSelectionSheetPointerDown} />
+            <div className="selection-panel-header" onPointerDown={handleSelectionSheetPointerDown}>
+              <h2>Selection</h2>
+              {(selected || playbackPoint) && (
+                <button
+                  type="button"
+                  className="secondary sheet-toggle"
+                  aria-expanded={!selectionMinimized}
+                  onClick={() => setSelectionMinimized((value) => !value)}
+                >
+                  {selectionMinimized ? 'Expand' : 'Minimize'}
+                </button>
+              )}
+            </div>
+            {(selected || playbackPoint) ? <Selection point={selected || playbackPoint} thumbValue={thumbPreferences[preferenceKeyForPoint(selected || playbackPoint)]} onThumb={(value) => toggleThumb(selected || playbackPoint, value)} onMark={() => toggleMark(selected || playbackPoint)} onUndo={undoSelection} onRedo={redoSelection} canUndo={selectionUndoStack.length > 0} canRedo={selectionRedoStack.length > 0} onSelectCluster={() => setSelectedCluster((selected || playbackPoint).cluster)} isFocused={Boolean(selected)} /> : <p className="muted">Click a point on the map.</p>}
           </section>
         </section>
 
@@ -436,35 +457,6 @@ function updateLayoutOption(setLayoutOptions, key, value) {
   setLayoutOptions((existing) => ({...existing, [key]: value}));
 }
 
-function layoutPayload(username, options) {
-  const pcaEnabled = Boolean(options.pcaEnabled);
-  return {
-    username,
-    pca_enabled: pcaEnabled,
-    pca_components: optionalNumber(options.pcaComponents) || 10,
-    tsne_input: pcaEnabled ? options.tsneInput : 'raw',
-    cluster_count: optionalNumber(options.clusterCount),
-    cluster_input: pcaEnabled ? options.clusterInput : 'raw',
-    tsne_perplexity: optionalNumber(options.tsnePerplexity),
-    tsne_learning_rate: optionalLearningRate(options.tsneLearningRate),
-    tsne_metric: options.tsneMetric,
-    random_state: Number(options.randomState) || 42,
-  };
-}
-
-function optionalNumber(value) {
-  if (String(value).trim() === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-function optionalLearningRate(value) {
-  const cleaned = String(value).trim();
-  if (!cleaned || cleaned.toLowerCase() === 'auto') return 'auto';
-  const numeric = Number(cleaned);
-  return Number.isFinite(numeric) ? numeric : 'auto';
-}
-
 function isEditingTarget(target) {
   const tagName = target?.tagName?.toLowerCase();
   return target?.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
@@ -492,27 +484,16 @@ function linksForSelection(selected, points) {
     .map((trackPoint) => ({source: selected.id, target: trackPoint.id, similarity: null}));
 }
 
-function pointSearchText(point) {
-  const metadata = point.metadata || {};
-  const flat = Object.entries(metadata)
-    .filter(([, value]) => value !== null && value !== undefined && typeof value !== 'object')
-    .map(([key, value]) => `${key} ${value}`)
-    .join(' ');
-  const artistTracks = (metadata.tracks || []).map((track) => `${track.title || ''} ${track.label || ''} ${track.url || ''}`).join(' ');
-  return `${point.kind} ${point.label} ${flat} ${artistTracks}`.toLowerCase();
+function selectRandomLinkedSong(edges, points, selected, selectPoint) {
+  const ids = Array.from(new Set((edges || []).flatMap((edge) => [edge.source, edge.target])));
+  const songs = ids
+    .map((id) => points.find((point) => point.id === id))
+    .filter((point) => point && point.id !== selected?.id && (point.kind === 'track' || point.kind === 'user_track'));
+  if (!songs.length) return;
+  selectPoint(songs[Math.floor(Math.random() * songs.length)], {focus: true});
 }
 
-function buildSearchIndex(points) {
-  return new Map(points.map((point) => [point.id, pointSearchText(point)]));
-}
-
-function searchResults(points, searchIndex, query) {
-  const cleaned = query.trim().toLowerCase();
-  if (!cleaned) return [];
-  return points.filter((point) => searchIndex.get(point.id)?.includes(cleaned));
-}
-
-function pointTooltipHtml(point) {
+function pointTooltipHtml(point, thumbValue = null) {
   const metadata = point.metadata || {};
   if (point.kind === 'track' || point.kind === 'user_track') {
     const rows = [
@@ -520,7 +501,7 @@ function pointTooltipHtml(point) {
       ['Song', metadata.title || point.label],
       ['Cluster', point.cluster],
     ];
-    return `<strong>${escapeHtml(metadata.title || point.label)}</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}<div class="tooltip-actions"><button type="button" data-tooltip-action="play-similar">▶</button><button type="button" data-tooltip-action="random-song">⏭</button></div>`;
+    return `<strong>${escapeHtml(metadata.title || point.label)}</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}<span class="thumb-status ${thumbValue ? `is-${thumbValue}` : ''}">${escapeHtml(thumbStatusLabel(thumbValue))}</span><div class="tooltip-actions"><button type="button" data-tooltip-action="thumb-up" class="thumb-up ${thumbValue === 'up' ? 'active' : ''}" aria-pressed="${thumbValue === 'up'}" aria-label="Thumbs up">${thumbValue === 'up' ? 'Liked' : '👍'}</button><button type="button" data-tooltip-action="thumb-down" class="thumb-down ${thumbValue === 'down' ? 'active' : ''}" aria-pressed="${thumbValue === 'down'}" aria-label="Thumbs down">${thumbValue === 'down' ? 'Disliked' : '👎'}</button><button type="button" data-tooltip-action="play-similar" aria-label="Play connected song">▶</button><button type="button" data-tooltip-action="random-song" aria-label="Random song">⏭</button></div>`;
   }
   const rows = [];
   if (metadata.artist_name || metadata.artist) rows.push(['Artist', metadata.artist_name || metadata.artist]);
@@ -530,6 +511,12 @@ function pointTooltipHtml(point) {
   if (metadata.cluster !== undefined || point.cluster !== undefined) rows.push(['Cluster', point.cluster]);
   if (metadata.url || metadata.source_url) rows.push(['URL', metadata.url || metadata.source_url]);
   return `<strong>${escapeHtml(point.label)}</strong><span>${escapeHtml(point.kind)}</span>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}`;
+}
+
+function thumbStatusLabel(value) {
+  if (value === 'up') return 'Preference: liked';
+  if (value === 'down') return 'Preference: disliked';
+  return 'Preference: not rated';
 }
 
 function edgeTooltipHtml(edge, byId) {
@@ -545,12 +532,29 @@ function edgeTooltipHtml(edge, byId) {
   return `<strong>Similarity edge</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}`;
 }
 
-function showTooltip(tooltip, event, html) {
+function showTooltipAt(tooltip, anchorElement, x, y, html) {
   const container = tooltip.offsetParent?.getBoundingClientRect() || {left: 0, top: 0};
+  const anchor = anchorElement.getBoundingClientRect();
   tooltip.hidden = false;
   tooltip.innerHTML = html;
-  tooltip.style.left = `${event.clientX - container.left + 14}px`;
-  tooltip.style.top = `${event.clientY - container.top + 14}px`;
+  const tooltipWidth = tooltip.offsetWidth || 280;
+  const tooltipHeight = tooltip.offsetHeight || 140;
+  const gap = 14;
+  const padding = 10;
+  const baseLeft = anchor.left - container.left + x;
+  const baseTop = anchor.top - container.top + y;
+  const containerWidth = container.width || window.innerWidth;
+  const containerHeight = container.height || window.innerHeight;
+  const opensLeft = baseLeft + gap + tooltipWidth > containerWidth - padding;
+  const opensUp = baseTop + gap + tooltipHeight > containerHeight - padding;
+  const left = clamp(opensLeft ? baseLeft - tooltipWidth - gap : baseLeft + gap, padding, Math.max(padding, containerWidth - tooltipWidth - padding));
+  const top = clamp(opensUp ? baseTop - tooltipHeight - gap : baseTop + gap, padding, Math.max(padding, containerHeight - tooltipHeight - padding));
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function roundedRect(context, x, y, width, height, radius) {
@@ -573,19 +577,6 @@ function distanceToSegment(px, py, x1, y1, x2, y2) {
   if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
   const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
-}
-
-function visibleMetadataEntries(metadata) {
-  const hidden = new Set(['url', 'source_url', 'path', 'vector_id', 'embedding_model', 'embedding_backend', 'model_name']);
-  return Object.entries(metadata)
-    .filter(([key, value]) => !hidden.has(key) && value !== null && value !== undefined && typeof value !== 'object');
-}
-
-function modelSummary(metadata) {
-  const model = metadata.embedding_model || metadata.model_name;
-  const backend = metadata.embedding_backend;
-  if (!model && !backend) return null;
-  return [backend, model].filter(Boolean).join(' / ');
 }
 
 function LayoutModal({layoutOptions, setLayoutOptions, recomputeLayout, onClose}) {
@@ -758,22 +749,30 @@ function UsernameGate({draftUsername, setDraftUsername, saveUsername, error}) {
   );
 }
 
-function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onPlaySimilar, onRandomSong}) {
+function Visualizer({points, selected, setSelected, marks, thumbPreferences, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onPlaySimilar, onRandomSong}) {
   const ref = useRef(null);
   const tooltipRef = useRef(null);
   const transformRef = useRef(d3.zoomIdentity);
   const handledFocusRef = useRef(null);
+  const tooltipRevealTimerRef = useRef(null);
+  const activeTooltipPointRef = useRef(null);
+  const [sizeVersion, setSizeVersion] = useState(0);
+
+  useEffect(() => {
+    if (!ref.current) return undefined;
+    const parent = ref.current.parentElement;
+    const observer = new ResizeObserver(() => setSizeVersion((version) => version + 1));
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!ref.current) return;
     const canvas = ref.current;
     const context = canvas.getContext('2d');
-    const parent = canvas.parentElement;
-    const bounds = parent.getBoundingClientRect();
-    const parentStyle = window.getComputedStyle(parent);
-    const horizontalPadding = parseFloat(parentStyle.paddingLeft) + parseFloat(parentStyle.paddingRight);
-    const width = Math.max(280, bounds.width - horizontalPadding);
-    const height = Math.max(520, Math.round(width * 0.62));
+    const bounds = canvas.getBoundingClientRect();
+    const width = Math.max(280, Math.round(bounds.width));
+    const height = Math.max(320, Math.round(bounds.height || width * 0.68));
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
@@ -788,7 +787,7 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
     const color = d3.scaleOrdinal(d3.schemeTableau10.concat(d3.schemeSet3));
     const byId = new Map(points.map((point) => [point.id, point]));
     const isVisible = (point) => point && (point.kind === 'artist' ? showArtists : showSongs);
-    const markerScale = (scale) => Math.max(0.45, 1 / Math.sqrt(Math.max(1, scale)));
+    const markerScale = (scale) => Math.max(0.65, 1 / Math.sqrt(Math.max(1, scale)));
     const symbol = d3.symbol().context(context);
     const screenPoint = (point) => [transformRef.current.applyX(x(point.x)), transformRef.current.applyY(y(point.y))];
     let hitPoints = [];
@@ -816,10 +815,10 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
       const [sx, sy] = screenPoint(point);
       const scale = markerScale(transformRef.current.k);
       const size = point.kind === 'user_track'
-        ? state.isSelected ? 280 : 180
+        ? state.isSelected ? 360 : 230
         : point.kind === 'artist'
-          ? state.isSelected ? 180 : 120
-          : state.isSelected ? 105 : 58;
+          ? state.isSelected ? 250 : 165
+          : state.isSelected ? 165 : 92;
       context.save();
       context.translate(sx * pixelRatio, sy * pixelRatio);
       context.scale(scale * pixelRatio, scale * pixelRatio);
@@ -832,7 +831,7 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
       context.strokeStyle = state.isSelected ? '#fff' : state.isSearchMatch || state.isClusterMatch ? '#ffd166' : state.isLinked || state.isMarked ? '#85f5c4' : 'rgba(255,255,255,0.85)';
       context.stroke();
       context.restore();
-      return {point, x: sx, y: sy, radius: Math.max(8, Math.sqrt(size) * scale)};
+      return {point, x: sx, y: sy, radius: Math.max(11, Math.sqrt(size) * scale)};
     }
 
     function draw() {
@@ -886,7 +885,7 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
     function nearestPoint(event) {
       if (!quadtree) return null;
       const [px, py] = pointerPosition(event);
-      const candidate = quadtree.find(px, py, 18);
+      const candidate = quadtree.find(px, py, 24);
       if (!candidate) return null;
       return Math.hypot(candidate.x - px, candidate.y - py) <= candidate.radius + 6 ? candidate.point : null;
     }
@@ -896,20 +895,65 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
       return hitEdges.find((item) => distanceToSegment(px, py, item.x1, item.y1, item.x2, item.y2) <= 8)?.edge || null;
     }
 
+    function showPointTooltip(point) {
+      activeTooltipPointRef.current = point;
+      const [sx, sy] = screenPoint(point);
+      showTooltipAt(tooltipRef.current, canvas, sx, sy, pointTooltipHtml(point, thumbPreferences?.[preferenceKeyForPoint(point)]));
+    }
+
+    function showEdgeTooltip(edge) {
+      activeTooltipPointRef.current = null;
+      const source = byId.get(edge.source);
+      const target = byId.get(edge.target);
+      if (!source || !target) return;
+      const [x1, y1] = screenPoint(source);
+      const [x2, y2] = screenPoint(target);
+      showTooltipAt(tooltipRef.current, canvas, (x1 + x2) / 2, (y1 + y2) / 2, edgeTooltipHtml(edge, byId));
+    }
+
+    function hideTooltipUntilPanStops() {
+      if (tooltipRevealTimerRef.current) window.clearTimeout(tooltipRevealTimerRef.current);
+      activeTooltipPointRef.current = null;
+      tooltipRef.current.hidden = true;
+      if (!selected || !isVisible(selected)) return;
+      tooltipRevealTimerRef.current = window.setTimeout(() => {
+        showPointTooltip(selected);
+        tooltipRevealTimerRef.current = null;
+      }, 500);
+    }
+
+    function ensurePointVisible(point, zoomSelection, zoomBehavior) {
+      const [sx, sy] = screenPoint(point);
+      const mobile = width < 760;
+      const left = mobile ? 28 : 24;
+      const right = width - (mobile ? 42 : 24);
+      const top = mobile ? 118 : 24;
+      const bottom = height - (mobile ? 96 : 24);
+      const dx = sx < left ? left - sx : sx > right ? right - sx : 0;
+      const dy = sy < top ? top - sy : sy > bottom ? bottom - sy : 0;
+      if (!dx && !dy) return false;
+      const current = transformRef.current;
+      const nextTransform = d3.zoomIdentity.translate(current.x + dx, current.y + dy).scale(current.k);
+      transformRef.current = nextTransform;
+      zoomSelection.call(zoomBehavior.transform, nextTransform);
+      return true;
+    }
+
     function handlePointerMove(event) {
       const point = nearestPoint(event);
       if (point) {
         canvas.style.cursor = 'pointer';
-        showTooltip(tooltipRef.current, event, pointTooltipHtml(point));
+        showPointTooltip(point);
         return;
       }
       const edge = nearestEdge(event);
       if (edge) {
         canvas.style.cursor = 'pointer';
-        showTooltip(tooltipRef.current, event, edgeTooltipHtml(edge, byId));
+        showEdgeTooltip(edge);
         return;
       }
       canvas.style.cursor = 'grab';
+      activeTooltipPointRef.current = null;
       tooltipRef.current.hidden = true;
     }
 
@@ -920,30 +964,36 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
 
     function handleMouseLeave(event) {
       if (tooltipRef.current?.contains(event.relatedTarget)) return;
+      if (selected && isVisible(selected)) {
+        showPointTooltip(selected);
+        return;
+      }
       tooltipRef.current.hidden = true;
     }
 
     function handleTooltipLeave() {
+      if (selected && isVisible(selected)) {
+        showPointTooltip(selected);
+        return;
+      }
       tooltipRef.current.hidden = true;
     }
 
     function handleTooltipClick(event) {
       const action = event.target?.dataset?.tooltipAction;
+      const activePoint = activeTooltipPointRef.current;
+      if (action === 'thumb-up' && activePoint) onThumb?.(activePoint, 'up');
+      if (action === 'thumb-down' && activePoint) onThumb?.(activePoint, 'down');
       if (action === 'play-similar') onPlaySimilar?.();
       if (action === 'random-song') onRandomSong?.();
     }
 
-    function showPointTooltip(point) {
-      const [sx, sy] = screenPoint(point);
-      const rect = canvas.getBoundingClientRect();
-      showTooltip(tooltipRef.current, {clientX: rect.left + sx, clientY: rect.top + sy}, pointTooltipHtml(point));
-    }
-
     const zoom = d3.zoom()
-      .scaleExtent([0.45, 18])
+      .scaleExtent([0.55, 10])
       .on('zoom', (event) => {
         transformRef.current = event.transform;
         scheduleDraw();
+        hideTooltipUntilPanStops();
       });
     const selection = d3.select(canvas);
     selection.call(zoom).on('dblclick.zoom', null);
@@ -967,16 +1017,28 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
           .translate(width / 2 - scale * x(focusPoint.x), height / 2 - scale * y(focusPoint.y))
           .scale(scale);
         transformRef.current = nextTransform;
-        selection.call(zoom.transform, nextTransform);
-        requestAnimationFrame(() => {
-          draw();
-          showPointTooltip(focusPoint);
-        });
+        tooltipRef.current.hidden = true;
+        selection
+          .transition()
+          .duration(520)
+          .ease(d3.easeCubicOut)
+          .call(zoom.transform, nextTransform)
+          .on('end', () => {
+            draw();
+            showPointTooltip(focusPoint);
+          });
       }
+    } else if (selected && isVisible(selected)) {
+      ensurePointVisible(selected, selection, zoom);
+      requestAnimationFrame(() => {
+        draw();
+        showPointTooltip(selected);
+      });
     }
 
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
+      if (tooltipRevealTimerRef.current) window.clearTimeout(tooltipRevealTimerRef.current);
       canvas.removeEventListener('mousemove', handlePointerMove);
       canvas.removeEventListener('click', handleClick);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
@@ -984,12 +1046,12 @@ function Visualizer({points, selected, setSelected, marks, edges, linkedPointIds
       tooltipRef.current?.removeEventListener('mouseleave', handleTooltipLeave);
       selection.on('.zoom', null);
     };
-  }, [points, selected, marks, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onPlaySimilar, onRandomSong]);
+  }, [points, selected, marks, thumbPreferences, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onPlaySimilar, onRandomSong, sizeVersion]);
 
   return <><canvas ref={ref} className="plot" /><div ref={tooltipRef} className="tooltip" hidden /></>;
 }
 
-function Selection({point, onMark, onUndo, onRedo, canUndo, canRedo, onSelectCluster}) {
+function Selection({point, thumbValue, onThumb, onMark, onUndo, onRedo, canUndo, canRedo, onSelectCluster}) {
   const metadata = point.metadata || {};
   const model = modelSummary(metadata);
   const playlist = playlistForPoint(point);
@@ -1010,6 +1072,13 @@ function Selection({point, onMark, onUndo, onRedo, canUndo, canRedo, onSelectClu
       </div>
       <p className="shortcut-hint">Shortcuts: Ctrl+Z undo, Ctrl+R redo.</p>
       <div className="selection-actions">
+        {(point.kind === 'track' || point.kind === 'user_track') && (
+          <>
+            <div className={`selection-thumb-status ${thumbValue ? `is-${thumbValue}` : ''}`}>{thumbStatusLabel(thumbValue)}</div>
+            <button type="button" className={`secondary thumb-button thumb-up ${thumbValue === 'up' ? 'active' : ''}`} onClick={() => onThumb('up')} aria-pressed={thumbValue === 'up'}>{thumbValue === 'up' ? 'Liked' : 'Like'}</button>
+            <button type="button" className={`secondary thumb-button thumb-down ${thumbValue === 'down' ? 'active' : ''}`} onClick={() => onThumb('down')} aria-pressed={thumbValue === 'down'}>{thumbValue === 'down' ? 'Disliked' : 'Dislike'}</button>
+          </>
+        )}
         <button type="button" onClick={onMark}>Toggle preference mark</button>
         <button type="button" className="secondary" onClick={onSelectCluster}>Highlight cluster {point.cluster}</button>
       </div>
@@ -1087,26 +1156,6 @@ function SoundCloudPlayer({url}) {
   );
 }
 
-function playlistForPoint(point) {
-  const metadata = point.metadata || {};
-  if (point.kind === 'artist') {
-    return (metadata.tracks || [])
-      .map((track) => playlistTrack(track.title || track.label || `Track ${track.track_id || ''}`, track.url, null))
-      .filter(Boolean);
-  }
-  const sourceUrl = metadata.url || metadata.source_url;
-  const localUrl = point.kind === 'user_track' && metadata.source_type === 'youtube' && metadata.username
-    ? `${API_BASE_URL}/users/${encodeURIComponent(metadata.username)}/tracks/${metadata.id}/audio`
-    : null;
-  return [playlistTrack(metadata.title || point.label, sourceUrl, localUrl)].filter(Boolean);
-}
-
-function playlistTrack(title, sourceUrl, localUrl) {
-  const soundcloudUrl = sourceUrl && sourceUrl.includes('soundcloud.com') ? sourceUrl : null;
-  if (!soundcloudUrl && !localUrl) return null;
-  return {title: title || 'Untitled track', soundcloudUrl, localUrl};
-}
-
 function TrackRow({track, active, onSelect}) {
   return (
     <button type="button" className={`track-row ${active ? 'active' : ''}`} onClick={onSelect}>
@@ -1116,10 +1165,6 @@ function TrackRow({track, active, onSelect}) {
       {track.last_error && <small>{track.last_error}</small>}
     </button>
   );
-}
-
-function isMarked(point, marks) {
-  return marks.has(`${point.kind}:${point.metadata?.artist_name || point.metadata?.artist || point.label}`);
 }
 
 function escapeHtml(value) {

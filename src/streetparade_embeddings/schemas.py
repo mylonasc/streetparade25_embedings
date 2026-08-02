@@ -80,6 +80,19 @@ class LayoutRequest(BaseModel):
     random_state: int = 42
 
 
+PreferenceValue = Literal["up", "down", "clear"]
+
+
+class PreferenceEventRequest(BaseModel):
+    point_id: str = _Field(min_length=1)
+    target_kind: Literal["track", "user_track"]
+    target_id: str = _Field(min_length=1)
+    value: PreferenceValue
+    track_id: int | None = None
+    user_track_id: int | None = None
+    vector_id: str | None = None
+
+
 @dataclass
 class EmbeddingJob:
     id: str

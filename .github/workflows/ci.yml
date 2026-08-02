@@ -113,6 +113,10 @@ jobs:
         working-directory: fe-visualizer
         run: npm ci
 
+      - name: Test visualizer UI
+        working-directory: fe-visualizer
+        run: npm run test:run
+
       - name: Build default visualizer
         working-directory: fe-visualizer
         run: npm run build

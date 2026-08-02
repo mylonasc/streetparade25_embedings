@@ -152,6 +152,23 @@ def init_db() -> None:
                 payload_json TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS preference_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                point_id TEXT NOT NULL,
+                target_kind TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                track_id INTEGER,
+                user_track_id INTEGER,
+                vector_id TEXT,
+                value TEXT NOT NULL CHECK(value IN ('up', 'down', 'clear')),
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS preference_events_user_target_idx
+                ON preference_events(user_id, target_kind, target_id, id);
             """
         )
         ensure_artist_columns(conn)
