@@ -71,6 +71,16 @@ def _now() -> str:
 set_job_clock(_now)
 
 
+def song_downloads_and_embeddings_enabled() -> bool:
+    raw = os.environ.get("ENABLE_SONG_DL_AND_EMBEDINGS", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off", ""}
+
+
+def _require_song_downloads_and_embeddings() -> None:
+    if not song_downloads_and_embeddings_enabled():
+        raise HTTPException(status_code=403, detail="per-user song downloads and embeddings are disabled")
+
+
 def _cors_origins() -> list[str]:
     raw = os.environ.get(
         "STREETPARADE_CORS_ORIGINS",
@@ -496,7 +506,8 @@ async def lifespan(app: FastAPI):
     init_db()
     await embedding_service.start()
     await download_service.start()
-    await user_track_analysis_service.start()
+    if song_downloads_and_embeddings_enabled():
+        await user_track_analysis_service.start()
     await layout_service.start()
     try:
         yield
@@ -665,6 +676,7 @@ async def get_user_profile(username: str) -> dict[str, Any]:
 
 @app.post("/users/{username}/tracks")
 async def submit_user_track(username: str, payload: dict[str, Any]) -> dict[str, Any]:
+    _require_song_downloads_and_embeddings()
     track = _create_user_track(username, str(payload.get("url", "")))
     job = await user_track_analysis_service.enqueue(int(track["id"]))
     return {"track": track, "job": job.as_dict()}
@@ -672,6 +684,7 @@ async def submit_user_track(username: str, payload: dict[str, Any]) -> dict[str,
 
 @app.get("/users/{username}/tracks")
 async def list_user_owned_tracks(username: str) -> list[dict[str, Any]]:
+    _require_song_downloads_and_embeddings()
     return _list_user_tracks(username)
 
 
@@ -689,6 +702,7 @@ async def set_user_preference(username: str, payload: PreferenceRequest) -> dict
 
 @app.get("/users/{username}/tracks/{user_track_id}/audio")
 async def get_user_track_audio(username: str, user_track_id: int) -> FileResponse:
+    _require_song_downloads_and_embeddings()
     track = _get_user_track_for_username(username, user_track_id)
     path = track.get("path")
     if not path or not Path(path).exists():
@@ -698,6 +712,7 @@ async def get_user_track_audio(username: str, user_track_id: int) -> FileRespons
 
 @app.get("/user-track-jobs/{job_id}")
 async def get_user_track_job(job_id: str) -> dict[str, Any]:
+    _require_song_downloads_and_embeddings()
     job = user_track_analysis_service.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="user track job not found")
@@ -706,11 +721,13 @@ async def get_user_track_job(job_id: str) -> dict[str, Any]:
 
 @app.get("/visualization")
 async def get_visualization(username: str | None = None) -> dict[str, Any]:
+    user_song_downloads_enabled = song_downloads_and_embeddings_enabled()
     if username:
         _get_or_create_user(username)
-    points = _visualization_points(username)
+    points = _visualization_points(username if user_song_downloads_enabled else None)
     return {
         "username": username,
+        "features": {"song_downloads_and_embeddings": user_song_downloads_enabled},
         "points": points,
         "point_count": len(points),
         "base_point_count": sum(1 for point in points if point.get("kind") == "track"),

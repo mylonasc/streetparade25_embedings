@@ -4,6 +4,7 @@ import time
 import sqlite3
 
 import numpy as np
+import pytest
 
 from streetparade_embeddings import api
 from streetparade_embeddings import repositories
@@ -235,6 +236,26 @@ def test_user_preference_updates_current_state(monkeypatch, tmp_path):
     with api._connect() as conn:
         count = conn.execute("SELECT COUNT(*) AS count FROM user_preferences").fetchone()["count"]
     assert count == 2
+
+
+def test_user_song_downloads_can_be_disabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "disabled-user-tracks.sqlite3"))
+    monkeypatch.setenv("ENABLE_SONG_DL_AND_EMBEDINGS", "0")
+
+    async def run():
+        with pytest.raises(api.HTTPException) as submit_error:
+            await api.submit_user_track("listener", {"url": "https://soundcloud.com/example/track"})
+        with pytest.raises(api.HTTPException) as list_error:
+            await api.list_user_owned_tracks("listener")
+        visualization = await api.get_visualization("listener")
+        return submit_error.value, list_error.value, visualization
+
+    submit_error, list_error, visualization = asyncio.run(run())
+
+    assert submit_error.status_code == 403
+    assert list_error.status_code == 403
+    assert visualization["features"]["song_downloads_and_embeddings"] is False
+    assert visualization["user_point_count"] == 0
 
 
 def test_download_endpoint_queues_and_exposes_downloading_then_completed(monkeypatch, tmp_path):

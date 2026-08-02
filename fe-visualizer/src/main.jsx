@@ -25,6 +25,7 @@ function App() {
   const [error, setError] = useState('');
   const [shareUrl, setShareUrl] = useState('');
   const [stats, setStats] = useState({point_count: 0, base_point_count: 0, artist_point_count: 0, user_point_count: 0});
+  const [songDownloadsEnabled, setSongDownloadsEnabled] = useState(true);
   const [layoutOptions, setLayoutOptions] = useState(DEFAULT_LAYOUT_OPTIONS);
   const [showLayoutModal, setShowLayoutModal] = useState(false);
   const [linkedTrackIds, setLinkedTrackIds] = useState(new Set());
@@ -41,11 +42,13 @@ function App() {
 
   async function loadAll(activeUsername = username) {
     if (!activeUsername) return;
-    const [viz, tracks, preferences] = await Promise.all([
-      request(`/visualization?username=${encodeURIComponent(activeUsername)}`),
-      request(`/users/${encodeURIComponent(activeUsername)}/tracks`),
+    const viz = await request(`/visualization?username=${encodeURIComponent(activeUsername)}`);
+    const userSongDownloadsEnabled = Boolean(viz.features?.song_downloads_and_embeddings);
+    const [tracks, preferences] = await Promise.all([
+      userSongDownloadsEnabled ? request(`/users/${encodeURIComponent(activeUsername)}/tracks`) : Promise.resolve([]),
       getUserPreferences(activeUsername),
     ]);
+    setSongDownloadsEnabled(userSongDownloadsEnabled);
     setPoints(viz.points || []);
     setStats({
       point_count: viz.point_count || 0,
@@ -72,6 +75,7 @@ function App() {
 
   async function submitTrack(event) {
     event.preventDefault();
+    if (!songDownloadsEnabled) return;
     setError('');
     setMessage('');
     try {
@@ -202,6 +206,7 @@ function App() {
   }
 
   function selectUserTrack(track) {
+    if (!songDownloadsEnabled) return;
     const pointId = `user-track-${track.id}`;
     const point = points.find((candidate) => candidate.id === pointId) || {
       id: pointId,
@@ -324,7 +329,9 @@ function App() {
     if (!username) return;
     const timer = setInterval(async () => {
       try {
-        const refreshedJobs = await Promise.all(jobs.filter((job) => ['queued', 'running'].includes(job.status)).map((job) => request(`/user-track-jobs/${job.id}`)));
+        const refreshedJobs = songDownloadsEnabled
+          ? await Promise.all(jobs.filter((job) => ['queued', 'running'].includes(job.status)).map((job) => request(`/user-track-jobs/${job.id}`)))
+          : [];
         if (refreshedJobs.length) setJobs((old) => old.map((job) => refreshedJobs.find((item) => item.id === job.id) || job));
         if (refreshedJobs.some((job) => ['completed', 'failed'].includes(job.status))) await loadAll();
         if (layoutJob && ['queued', 'running'].includes(layoutJob.status)) {
@@ -337,7 +344,7 @@ function App() {
       }
     }, 3000);
     return () => clearInterval(timer);
-  }, [username, jobs, layoutJob]);
+  }, [username, jobs, layoutJob, songDownloadsEnabled]);
 
   const searchIndex = useMemo(() => buildSearchIndex(points), [points]);
   const visibleSearchResults = useMemo(() => searchResults(points, searchIndex, searchQuery), [points, searchIndex, searchQuery]);
@@ -397,6 +404,11 @@ function App() {
               <button type="button" className={`secondary toggle-button ${showArtists ? 'active' : ''}`} onClick={() => setShowArtists((value) => !value)}>Artists</button>
               <button type="button" className="secondary icon-button" aria-label="Help" onClick={() => setShowHelp(true)}>?</button>
             </div>
+            {!songDownloadsEnabled && (
+              <div className="empty-warning feature-warning">
+                Song downloads and user-track embeddings are disabled on this deployment.
+              </div>
+            )}
             {stats.base_point_count === 0 && (
               <div className="empty-warning">
                 No Street Parade vectors loaded. Check that the API can access the Chroma vector store, especially `./chroma` when using Docker.
@@ -425,26 +437,30 @@ function App() {
         </section>
 
         <aside className="side">
-          <form className="panel" onSubmit={submitTrack}>
-            <h2>Add a track</h2>
-            <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="SoundCloud or YouTube URL" required />
-            <button type="submit">Analyze Track</button>
-          </form>
+          {songDownloadsEnabled && (
+            <>
+              <form className="panel" onSubmit={submitTrack}>
+                <h2>Add a track</h2>
+                <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="SoundCloud or YouTube URL" required />
+                <button type="submit">Analyze Track</button>
+              </form>
 
-          <section className="panel">
-            <h2>My songs</h2>
-            <div className="song-list">
-              {userTracks.map((track) => (
-                <TrackRow
-                  key={track.id}
-                  track={track}
-                  active={selected?.id === `user-track-${track.id}`}
-                  onSelect={() => selectUserTrack(track)}
-                />
-              ))}
-            </div>
-            {!userTracks.length && <p className="muted">No submitted songs yet.</p>}
-          </section>
+              <section className="panel">
+                <h2>My songs</h2>
+                <div className="song-list">
+                  {userTracks.map((track) => (
+                    <TrackRow
+                      key={track.id}
+                      track={track}
+                      active={selected?.id === `user-track-${track.id}`}
+                      onSelect={() => selectUserTrack(track)}
+                    />
+                  ))}
+                </div>
+                {!userTracks.length && <p className="muted">No submitted songs yet.</p>}
+              </section>
+            </>
+          )}
 
           <section className="panel actions">
             <h2>Map layout</h2>

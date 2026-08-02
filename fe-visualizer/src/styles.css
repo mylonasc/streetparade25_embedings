@@ -45,6 +45,7 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .toggle-button { padding-inline: 12px; }
 .toggle-button.active { color: #06100c; background: var(--accent); }
 .empty-warning { position: absolute; z-index: 4; left: 16px; right: 16px; top: 128px; padding: 12px 14px; border: 1px solid rgba(255, 181, 168, 0.4); border-radius: 16px; color: #ffb5a8; background: rgba(80, 24, 18, 0.78); }
+.feature-warning { top: 86px; color: var(--accent); border-color: rgba(133, 245, 196, 0.34); background: rgba(12, 58, 44, 0.72); }
 .map-search { position: absolute; z-index: 5; left: 16px; right: 16px; top: 16px; display: grid; gap: 8px; }
 .search-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .map-search input, .cluster-select-row select { border-radius: 999px; background: rgba(8, 11, 18, 0.86); backdrop-filter: blur(12px); }
@@ -160,6 +161,7 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
   .icon-button { width: 44px; height: 44px; min-height: 44px; font-size: 1.2rem; }
   .map-search { left: 28px; right: auto; top: auto; bottom: 26px; width: min(520px, calc(100% - 56px)); }
   .empty-warning { left: 28px; right: 28px; top: 78px; }
+  .feature-warning { top: 78px; }
   .selection-panel, .selection-panel.has-selection, .selection-panel.has-selection.is-minimized { position: static; z-index: auto; display: block; max-height: none; overflow: visible; padding: 18px; border-radius: 26px; background: var(--panel); box-shadow: 0 24px 70px rgba(0,0,0,0.28); }
   .selection-panel h2 { margin-bottom: 14px; font-size: 1.5em; color: var(--text); text-transform: none; letter-spacing: normal; }
   .selection-panel-header { display: block; margin-bottom: 0; }
