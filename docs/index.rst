@@ -1,12 +1,13 @@
 Street Parade Embeddings
 ========================
 
-Reusable tools for downloading SoundCloud audio and computing artist-level CLAP embeddings for research analysis.
+Reusable tools for downloading SoundCloud and YouTube audio, computing CLAP embeddings, storing vectors in SQLite/ChromaDB, and exploring Street Parade artists and tracks through API-backed visualizations.
 
-The package supports two common workflows:
+The package supports three common workflows:
 
 * Python-library workflows from an ``artist_links.json`` file.
 * API/admin workflows for queued downloads, embedding jobs, and vector search.
+* Backend-backed visualizer workflows with user-submitted tracks, recomputed layouts, similarity links, and share tokens.
 
 .. toctree::
    :maxdepth: 2
@@ -15,6 +16,7 @@ The package supports two common workflows:
    installation
    usage
    research_workflow
+   visualizer
    data_model
    api
 

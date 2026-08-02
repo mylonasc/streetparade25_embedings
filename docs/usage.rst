@@ -148,3 +148,42 @@ For an existing ``artist_links.json``:
    download_artist_tracks(config)
    results = compute_artist_embeddings(config)
    save_embedding_results(results, config.resolved_output_dir)
+
+Batch Index Artists 2026
+------------------------
+
+Index SoundCloud tracks from ``artists_2026.yaml`` without using ``yt-dlp`` for SoundCloud downloads:
+
+.. code-block:: bash
+
+   uv run python scripts/index_artists_2026.py --max-tracks-per-artist 5
+
+Use ``--max-tracks-per-artist 0`` to process all discovered tracks for each artist. Discovery and downloads use direct SoundCloud HTTP API calls, and embeddings are stored in ChromaDB with metadata in SQLite.
+
+Static Embedding Visualization
+------------------------------
+
+Create the compact static-data snapshot used by the static D3 visualization:
+
+.. code-block:: bash
+
+   uv run python scripts/create_static_data_snapshot.py \
+     --db streetparade_embeddings.sqlite3 \
+     --chroma-dir chroma \
+     --out scripts/.data_cache/static_data_snapshot.json
+
+Generate a static t-SNE scatterplot from that snapshot:
+
+.. code-block:: bash
+
+   uv run python scripts/build_embedding_visualization.py \
+     --snapshot scripts/.data_cache/static_data_snapshot.json \
+     --out outputs/embedding_visualization \
+     --playback local \
+     --start-fraction 0.5
+
+Serve it locally with range-aware audio support:
+
+.. code-block:: bash
+
+   uv run python scripts/serve_embedding_visualization.py --directory outputs/embedding_visualization --port 8080

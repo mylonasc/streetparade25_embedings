@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field as _Field
 
@@ -48,6 +48,7 @@ class ComputeRequest(BaseModel):
     chunk_stride_seconds: int = _Field(default=60, ge=1)
     max_chunks: int = _Field(default=10, ge=1)
     max_tracks: int | None = _Field(default=None, ge=1)
+    compute_segment_embeddings: bool = False
 
 
 class SimilaritySearchRequest(BaseModel):
@@ -55,10 +56,28 @@ class SimilaritySearchRequest(BaseModel):
     vector_ids: list[str] | None = None
     track_ids: list[int] | None = None
     n_results: int = _Field(default=10, ge=1, le=100)
+    metric: Literal["cosine", "euclidean"] = "cosine"
     artist_id: int | None = None
     embedding_backend: str | None = None
     embedding_model: str | None = None
     sampling_strategy_hash: str | None = None
+
+
+TsneMetric = Literal["cosine", "euclidean", "manhattan"]
+LayoutInput = Literal["raw", "pca"]
+
+
+class LayoutRequest(BaseModel):
+    username: str | None = None
+    pca_enabled: bool = False
+    pca_components: int = _Field(default=10, ge=1)
+    tsne_input: LayoutInput = "raw"
+    cluster_count: int | None = _Field(default=None, ge=1)
+    cluster_input: LayoutInput = "raw"
+    tsne_perplexity: float | None = _Field(default=None, gt=0)
+    tsne_learning_rate: float | Literal["auto"] = "auto"
+    tsne_metric: TsneMetric = "cosine"
+    random_state: int = 42
 
 
 @dataclass

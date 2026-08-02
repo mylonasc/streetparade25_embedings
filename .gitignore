@@ -1,5 +1,6 @@
 .venv/
 .songs_cache/
+.ci-media-cache/
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -9,3 +10,7 @@ node_modules/
 dist/
 data/
 hf-cache/
+chroma/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

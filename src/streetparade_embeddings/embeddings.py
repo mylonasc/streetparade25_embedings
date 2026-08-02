@@ -27,6 +27,10 @@ class ClapEmbeddingModel:
         self.model.eval()
 
     def embed_chunks(self, chunks: list[np.ndarray], sampling_rate: int = DEFAULT_SAMPLING_RATE) -> AudioEmbedding:
+        chunk_embeddings = self.embed_chunk_batch(chunks, sampling_rate=sampling_rate)
+        return chunk_embeddings.mean(axis=0)
+
+    def embed_chunk_batch(self, chunks: list[np.ndarray], sampling_rate: int = DEFAULT_SAMPLING_RATE) -> np.ndarray:
         if not chunks:
             raise ValueError("Cannot embed a track with no complete audio chunks")
 
@@ -35,7 +39,7 @@ class ClapEmbeddingModel:
         inputs = self.processor(audio=chunks, sampling_rate=sampling_rate, return_tensors="pt").to(self.device)
         with torch.no_grad():
             audio_embed = self.model.get_audio_features(**inputs)
-        return audio_embed.pooler_output.mean(0).cpu().numpy()
+        return audio_embed.pooler_output.cpu().numpy()
 
     def embed_track(
         self,
@@ -53,6 +57,23 @@ class ClapEmbeddingModel:
             max_chunks=max_chunks,
         )
         return self.embed_chunks(chunks, sampling_rate=sampling_rate)
+
+    def embed_track_segments(
+        self,
+        track_path: str | Path,
+        sampling_rate: int = DEFAULT_SAMPLING_RATE,
+        chunk_seconds: int = 30,
+        stride_seconds: int = 60,
+        max_chunks: int = 10,
+    ) -> np.ndarray:
+        chunks = preprocess_track(
+            track_path,
+            sampling_rate=sampling_rate,
+            chunk_seconds=chunk_seconds,
+            stride_seconds=stride_seconds,
+            max_chunks=max_chunks,
+        )
+        return self.embed_chunk_batch(chunks, sampling_rate=sampling_rate)
 
 
 def aggregate_embeddings(embeddings: list[AudioEmbedding]) -> AudioEmbedding | None:

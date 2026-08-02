@@ -3,12 +3,14 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 ARG VITE_API_BASE_URL=
+ARG VITE_BASE_PATH=/
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
 
 COPY package.json package-lock.json* ./
 RUN npm install
 
-COPY index.html ./
+COPY index.html vite.config.js ./
 COPY src ./src
 RUN npm run build
 

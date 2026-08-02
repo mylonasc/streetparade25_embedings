@@ -437,3 +437,47 @@ def test_embedding_job_can_be_cancelled_from_api(monkeypatch, tmp_path):
     with api._connect() as conn:
         row = conn.execute("SELECT embedding FROM tracks WHERE id = ?", (track_id,)).fetchone()
     assert row["embedding"] is None
+
+
+def test_embedding_service_can_store_segment_embeddings(monkeypatch, tmp_path):
+    monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "segments.sqlite3"))
+    vector_store = FakeVectorStore()
+    monkeypatch.setattr(repositories, "get_vector_store", lambda: vector_store)
+    track_id = _insert_track(artist="Segment Artist", url="https://soundcloud.com/a/segment")
+    with api._connect() as conn:
+        conn.execute(
+            "INSERT INTO track_samples (track_id, chunk_index, start_seconds, duration_seconds) VALUES (?, ?, ?, ?)",
+            (track_id, 0, 0.0, 30.0),
+        )
+        conn.execute(
+            "INSERT INTO track_samples (track_id, chunk_index, start_seconds, duration_seconds) VALUES (?, ?, ?, ?)",
+            (track_id, 1, 60.0, 30.0),
+        )
+
+    class SegmentFakeModel:
+        def __init__(self, model_name, device):
+            pass
+
+        def embed_track_segments(self, *args, **kwargs):
+            return np.array([[1.0, 3.0], [5.0, 7.0]], dtype=np.float32)
+
+    async def run():
+        service = api.LazyClapEmbeddingService(model_cls=SegmentFakeModel)
+        try:
+            job = await service.enqueue(api.ComputeRequest(only_missing=False, compute_segment_embeddings=True, device=Device.CPU))
+            while job.status in {"queued", "running"}:
+                await asyncio.sleep(0.01)
+            return job.as_dict()
+        finally:
+            await service.stop()
+
+    job = asyncio.run(run())
+
+    assert job["status"] == "completed"
+    with api._connect() as conn:
+        track_row = conn.execute("SELECT embedding_dim FROM track_embeddings WHERE track_id = ?", (track_id,)).fetchone()
+        sample_rows = conn.execute("SELECT track_sample_id, embedding_dim, vector_id FROM sample_embeddings WHERE track_id = ? ORDER BY chunk_index", (track_id,)).fetchall()
+    assert track_row["embedding_dim"] == 2
+    assert len(sample_rows) == 2
+    assert [row["embedding_dim"] for row in sample_rows] == [2, 2]
+    assert all(row["vector_id"] in vector_store.vectors for row in sample_rows)

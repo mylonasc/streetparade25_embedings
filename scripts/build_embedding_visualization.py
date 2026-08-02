@@ -23,6 +23,7 @@ from streetparade_embeddings.vectorstore import get_vector_store
 DEFAULT_DB = Path("streetparade_embeddings.sqlite3")
 DEFAULT_CHROMA_DIR = Path("chroma")
 DEFAULT_OUTPUT_DIR = Path("outputs/embedding_visualization")
+DEFAULT_SNAPSHOT = Path("scripts/.data_cache/static_data_snapshot.json")
 
 
 @dataclass
@@ -40,6 +41,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite metadata database path.")
     parser.add_argument("--chroma-dir", type=Path, default=DEFAULT_CHROMA_DIR, help="Chroma persistence directory.")
+    parser.add_argument(
+        "--snapshot",
+        type=Path,
+        default=None,
+        help="Static data snapshot produced by scripts/create_static_data_snapshot.py. When set, SQLite and Chroma are not read.",
+    )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT_DIR, help="Output directory for the generated site.")
     parser.add_argument("--clusters", type=int, default=None, help="Number of spectral clusters. Defaults to an automatic value.")
     parser.add_argument("--perplexity", type=float, default=None, help="t-SNE perplexity. Defaults to an automatic value.")
@@ -88,7 +95,23 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: str | None) -> list[EmbeddingPoint]:
+def load_points(
+    db_path: Path,
+    chroma_dir: Path,
+    include_artists: bool,
+    model: str | None,
+    snapshot_path: Path | None = None,
+) -> list[EmbeddingPoint]:
+    if snapshot_path is not None:
+        return load_points_from_snapshot(snapshot_path, include_artists=include_artists, model=model)
+
+    track_points = load_track_points(db_path, chroma_dir, model=model)
+    if not include_artists:
+        return track_points
+    return track_points + build_artist_points(track_points)
+
+
+def load_track_points(db_path: Path, chroma_dir: Path, model: str | None) -> list[EmbeddingPoint]:
     if not db_path.exists():
         raise FileNotFoundError(f"SQLite database not found: {db_path}")
     if not chroma_dir.exists():
@@ -99,9 +122,6 @@ def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: s
         rows = conn.execute(latest_track_embedding_sql(model is not None), (model,) if model else ()).fetchall()
 
     track_points: list[EmbeddingPoint] = []
-    vectors_by_artist: dict[int, list[np.ndarray]] = {}
-    artist_metadata: dict[int, dict[str, Any]] = {}
-    tracks_by_artist: dict[int, list[dict[str, Any]]] = {}
     for row in rows:
         vector = vector_store.get_embedding(row["vector_id"])
         if vector is None:
@@ -125,6 +145,15 @@ def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: s
             "embedding_model": row["embedding_model"],
             "embedding_dim": row["embedding_dim"],
             "embedded_at": row["embedded_at"],
+            "artist_links": json_data(row["links"], []),
+            "artist_images": json_data(row["images"], []),
+            "artist_info": json_data(row["info"], []),
+            "artist_socials": json_data(row["socials"], []),
+            "artist_bio": row["bio"],
+            "artist_soundcloud_url": row["soundcloud_url"],
+            "artist_instagram": row["instagram"],
+            "artist_youtube": row["youtube"],
+            "artist_web": row["web"],
         }
         metadata["soundcloud_embed_url"] = soundcloud_embed_url(metadata["url"])
         track_points.append(
@@ -136,39 +165,70 @@ def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: s
                 metadata=metadata,
             )
         )
-        artist_id = int(row["artist_id"])
-        vectors_by_artist.setdefault(artist_id, []).append(embedding)
+    return track_points
+
+
+def load_points_from_snapshot(snapshot_path: Path, include_artists: bool, model: str | None) -> list[EmbeddingPoint]:
+    if not snapshot_path.exists():
+        raise FileNotFoundError(f"static data snapshot not found: {snapshot_path}")
+    payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    track_points = []
+    for item in payload.get("track_points", []):
+        metadata = item.get("metadata") or {}
+        if model is not None and metadata.get("embedding_model") != model:
+            continue
+        track_points.append(
+            EmbeddingPoint(
+                id=str(item["id"]),
+                kind="track",
+                label=str(item["label"]),
+                embedding=np.asarray(item["embedding"], dtype=np.float32),
+                metadata=metadata,
+            )
+        )
+
+    if not include_artists:
+        return track_points
+    return track_points + build_artist_points(track_points)
+
+
+def build_artist_points(track_points: list[EmbeddingPoint]) -> list[EmbeddingPoint]:
+    vectors_by_artist: dict[int, list[np.ndarray]] = {}
+    artist_metadata: dict[int, dict[str, Any]] = {}
+    tracks_by_artist: dict[int, list[dict[str, Any]]] = {}
+
+    for point in track_points:
+        metadata = point.metadata
+        artist_id = int(metadata["artist_id"])
+        vectors_by_artist.setdefault(artist_id, []).append(point.embedding)
         tracks_by_artist.setdefault(artist_id, []).append(
             {
-                "track_id": row["track_id"],
-                "title": title,
-                "artist_name": artist_name,
-                "url": row["url"],
-                "soundcloud_embed_url": soundcloud_embed_url(row["url"]),
-                "path": row["path"],
+                "track_id": metadata.get("track_id"),
+                "title": metadata.get("title"),
+                "artist_name": metadata.get("artist_name"),
+                "url": metadata.get("url"),
+                "soundcloud_embed_url": metadata.get("soundcloud_embed_url") or soundcloud_embed_url(metadata.get("url")),
+                "path": metadata.get("path"),
             }
         )
         artist_metadata.setdefault(
             artist_id,
             {
                 "artist_id": artist_id,
-                "artist_uuid": row["artist_uuid_db"] or row["artist_uuid"],
-                "artist_name": artist_name,
-                "links": json_data(row["links"], []),
-                "images": json_data(row["images"], []),
-                "info": json_data(row["info"], []),
-                "socials": json_data(row["socials"], []),
-                "bio": row["bio"],
-                "soundcloud_url": row["soundcloud_url"],
-                "soundcloud_embed_url": soundcloud_embed_url(row["soundcloud_url"]),
-                "instagram": row["instagram"],
-                "youtube": row["youtube"],
-                "web": row["web"],
+                "artist_uuid": metadata.get("artist_uuid"),
+                "artist_name": metadata.get("artist_name"),
+                "links": metadata.get("artist_links") or [],
+                "images": metadata.get("artist_images") or [],
+                "info": metadata.get("artist_info") or [],
+                "socials": metadata.get("artist_socials") or [],
+                "bio": metadata.get("artist_bio"),
+                "soundcloud_url": metadata.get("artist_soundcloud_url"),
+                "soundcloud_embed_url": soundcloud_embed_url(metadata.get("artist_soundcloud_url")),
+                "instagram": metadata.get("artist_instagram"),
+                "youtube": metadata.get("artist_youtube"),
+                "web": metadata.get("artist_web"),
             },
         )
-
-    if not include_artists:
-        return track_points
 
     artist_points = []
     for artist_id, vectors in vectors_by_artist.items():
@@ -186,7 +246,28 @@ def load_points(db_path: Path, chroma_dir: Path, include_artists: bool, model: s
                 metadata=metadata,
             )
         )
-    return track_points + artist_points
+    return artist_points
+
+
+def snapshot_payload(track_points: list[EmbeddingPoint], db_path: Path, chroma_dir: Path, model: str | None) -> dict[str, Any]:
+    return {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": {
+            "db": str(db_path),
+            "chroma_dir": str(chroma_dir),
+            "model_filter": model,
+        },
+        "track_point_count": len(track_points),
+        "track_points": [
+            {
+                "id": point.id,
+                "label": point.label,
+                "embedding": point.embedding.astype(float).tolist(),
+                "metadata": point.metadata,
+            }
+            for point in track_points
+        ],
+    }
 
 
 def latest_track_embedding_sql(has_model_filter: bool) -> str:
@@ -326,6 +407,7 @@ def write_site(points: list[EmbeddingPoint], projection: np.ndarray, clusters: n
         "source": {
             "db": str(args.db),
             "chroma_dir": str(args.chroma_dir),
+            "snapshot": str(args.snapshot) if args.snapshot else None,
             "model_filter": args.model,
             "playback": args.playback,
         },
@@ -870,7 +952,13 @@ pre { white-space: pre-wrap; margin: 0; font-size: 0.82rem; }
 
 def main() -> None:
     args = parse_args()
-    points = load_points(args.db, args.chroma_dir, include_artists=not args.tracks_only, model=args.model)
+    points = load_points(
+        args.db,
+        args.chroma_dir,
+        include_artists=not args.tracks_only,
+        model=args.model,
+        snapshot_path=args.snapshot,
+    )
     projection = build_projection(points, args.perplexity, args.random_state)
     clusters = build_clusters(points, args.clusters, args.random_state)
     write_site(points, projection, clusters, args)

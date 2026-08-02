@@ -156,6 +156,7 @@ def init_db() -> None:
         )
         ensure_artist_columns(conn)
         ensure_track_columns(conn)
+        ensure_sample_embedding_table(conn)
         ensure_uuid_indexes(conn)
         ensure_entity_uuids(conn)
 
@@ -185,6 +186,36 @@ def ensure_track_columns(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE tracks SET download_status = 'completed' WHERE downloaded = 1")
     if "uuid" not in columns:
         conn.execute("ALTER TABLE tracks ADD COLUMN uuid TEXT")
+
+
+def ensure_sample_embedding_table(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS sample_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            vector_id TEXT NOT NULL UNIQUE,
+            track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+            track_sample_id INTEGER NOT NULL REFERENCES track_samples(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL,
+            start_seconds REAL NOT NULL,
+            duration_seconds REAL NOT NULL,
+            embedding_backend TEXT NOT NULL,
+            embedding_model TEXT NOT NULL,
+            embedding_model_config TEXT NOT NULL,
+            embedding_model_config_hash TEXT NOT NULL,
+            sampling_strategy TEXT NOT NULL,
+            sampling_strategy_hash TEXT NOT NULL,
+            pipeline_config TEXT NOT NULL,
+            embedding_dim INTEGER NOT NULL,
+            embedded_at TEXT NOT NULL,
+            last_error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(track_sample_id, embedding_backend, embedding_model, embedding_model_config_hash, sampling_strategy_hash)
+        );
+        """
+    )
 
 
 def ensure_uuid_indexes(conn: sqlite3.Connection) -> None:

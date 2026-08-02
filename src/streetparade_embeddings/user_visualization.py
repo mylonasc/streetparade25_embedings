@@ -15,13 +15,14 @@ from uuid import uuid4
 import numpy as np
 from fastapi import HTTPException
 from sklearn.cluster import SpectralClustering
+from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.metrics.pairwise import euclidean_distances
 
 from .db import connect, ensure_entity_uuids, init_db
 from .embeddings import ClapEmbeddingModel
 from .repositories import create_or_update_artist, store_track_embedding, upsert_track
-from .schemas import ArtistCreate, ComputeRequest
+from .schemas import ArtistCreate, ComputeRequest, LayoutRequest
 from .soundcloud import download_track_to_cache
 from .youtube import download_youtube_to_cache
 from .vectorstore import get_vector_store
@@ -50,6 +51,7 @@ class UserTrackJob:
 class LayoutJob:
     id: str
     username: str | None
+    request: LayoutRequest = field(default_factory=LayoutRequest)
     status: str = "queued"
     error: str | None = None
     created_at: str = field(default_factory=lambda: _now())
@@ -57,7 +59,9 @@ class LayoutJob:
     finished_at: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return self.__dict__.copy()
+        data = self.__dict__.copy()
+        data["request"] = self.request.model_dump(mode="json")
+        return data
 
 
 def _now() -> str:
@@ -337,12 +341,12 @@ def visualization_points(username: str | None = None) -> list[dict[str, Any]]:
     return add_artist_points(points)
 
 
-def base_embedding_points() -> list[dict[str, Any]]:
+def base_embedding_points(request: LayoutRequest | None = None) -> list[dict[str, Any]]:
     rows = latest_embedding_rows(include_user_artists=False)
     pairs = rows_with_vectors(rows)
     if not pairs:
         return []
-    projection, clusters = project_and_cluster([vector for _, vector in pairs])
+    projection, clusters = project_and_cluster([vector for _, vector in pairs], request)
     points = []
     for idx, (row, _) in enumerate(pairs):
         points.append(track_point(row, float(projection[idx, 0]), float(projection[idx, 1]), int(clusters[idx])))
@@ -391,20 +395,28 @@ def add_artist_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def merge_current_user_points(points: list[dict[str, Any]], username: str) -> list[dict[str, Any]]:
-    current = {point["id"]: point for point in user_points(username)}
+    current = {f"user-track-{track['id']}": track for track in list_user_tracks(username) if track.get("status") == "completed"}
     merged = []
     seen = set()
     for point in points:
         if point.get("kind") == "user_track":
-            replacement = current.get(point["id"])
-            if replacement is not None:
-                merged.append(replacement)
+            track = current.get(point["id"])
+            if track is not None:
+                merged.append(
+                    user_point_from_track(
+                        track,
+                        float(point.get("x", 0.0)),
+                        float(point.get("y", 0.0)),
+                        int(point.get("cluster", -1)),
+                        placement_method=(point.get("metadata") or {}).get("placement_method") or "tsne_recomputed",
+                    )
+                )
                 seen.add(point["id"])
             continue
         merged.append(point)
-    for point_id, point in current.items():
+    for point_id, track in current.items():
         if point_id not in seen:
-            merged.append(point)
+            merged.append(user_point_from_track(track))
     return merged
 
 
@@ -416,7 +428,7 @@ def user_points(username: str) -> list[dict[str, Any]]:
     ]
 
 
-def recompute_layout(username: str | None = None) -> list[dict[str, Any]]:
+def recompute_layout(username: str | None = None, request: LayoutRequest | None = None) -> list[dict[str, Any]]:
     username = normalize_username(username) if username else None
     rows = latest_embedding_rows(include_user_artists=username is not None)
     if username:
@@ -425,7 +437,7 @@ def recompute_layout(username: str | None = None) -> list[dict[str, Any]]:
     pairs = rows_with_vectors(rows)
     if not pairs:
         return []
-    projection, clusters = project_and_cluster([vector for _, vector in pairs])
+    projection, clusters = project_and_cluster([vector for _, vector in pairs], request)
     user_track_map = user_tracks_by_track_id(username) if username else {}
     points = []
     for idx, (row, _) in enumerate(pairs):
@@ -562,19 +574,34 @@ def approximate_user_coordinates(embedding: np.ndarray) -> tuple[float | None, f
     return float(np.mean([point["x"] for point in coords])), float(np.mean([point["y"] for point in coords]))
 
 
-def project_and_cluster(vectors: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+def project_and_cluster(vectors: list[np.ndarray], request: LayoutRequest | None = None) -> tuple[np.ndarray, np.ndarray]:
     if len(vectors) == 1:
         return np.zeros((1, 2), dtype=np.float32), np.zeros(1, dtype=int)
     x = np.vstack(vectors)
-    # perplexity = min(30.0, max(1.0, (len(vectors) - 1) / 3.0), len(vectors) - 1e-3)
-    # projection = TSNE(n_components=2, perplexity=perplexity, metric="euclidean", init="random", learning_rate="auto", random_state=42).fit_transform(x)
-    projection = TSNE(n_components=2, random_state=123456).fit_transform(x)
-            
-    cluster_count = min(max(2, round(math.sqrt(len(vectors) / 2))), 12, len(vectors) - 1)
+    request = request or LayoutRequest()
+    pca_x = None
+    if request.pca_enabled:
+        component_count = min(request.pca_components, x.shape[0], x.shape[1])
+        pca_x = PCA(n_components=component_count, random_state=request.random_state).fit_transform(x)
+    tsne_x = pca_x if request.pca_enabled and request.tsne_input == "pca" and pca_x is not None else x
+    cluster_x = pca_x if request.pca_enabled and request.cluster_input == "pca" and pca_x is not None else x
+    automatic_perplexity = min(30.0, max(1.0, (len(vectors) - 1) / 3.0), len(vectors) - 1e-3)
+    perplexity = min(request.tsne_perplexity or automatic_perplexity, len(vectors) - 1e-3)
+    projection = TSNE(
+        n_components=2,
+        perplexity=perplexity,
+        metric=request.tsne_metric,
+        init="random",
+        learning_rate=request.tsne_learning_rate,
+        random_state=request.random_state,
+    ).fit_transform(tsne_x)
+    automatic_cluster_count = max(2, round(math.sqrt(len(vectors) / 2)))
+    cluster_count = request.cluster_count or automatic_cluster_count
+    cluster_count = min(cluster_count, 12 if request.cluster_count is None else cluster_count, len(vectors) - 1)
     if cluster_count <= 1:
         clusters = np.zeros(len(vectors), dtype=int)
     else:
-        clusters = SpectralClustering(n_clusters=cluster_count, affinity="rbf", random_state=42).fit_predict(x)
+        clusters = SpectralClustering(n_clusters=cluster_count, affinity="rbf", random_state=request.random_state).fit_predict(cluster_x)
     return projection, clusters.astype(int)
 
 

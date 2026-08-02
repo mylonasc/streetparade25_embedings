@@ -5,14 +5,12 @@ services:
       dockerfile: Dockerfile
     environment:
       STREETPARADE_DB: /data/streetparade_embeddings.sqlite3
-      STREETPARADE_SEED_DB: /seed/streetparade_embeddings.sqlite3
       STREETPARADE_CHROMA_DIR: /app/chroma
       STREETPARADE_CORS_ORIGINS: http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:5173,http://127.0.0.1:5174
     ports:
       - "8000:8000"
     volumes:
       - ./data:/data
-      - ./streetparade_embeddings.sqlite3:/seed/streetparade_embeddings.sqlite3:ro
       - ./chroma:/app/chroma
       - ./.songs_cache:/app/.songs_cache
       - ./hf-cache:/root/.cache/huggingface

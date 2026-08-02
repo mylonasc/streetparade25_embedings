@@ -1,0 +1,29 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      STREETPARADE_DB: /data/streetparade_embeddings.sqlite3
+      STREETPARADE_CHROMA_DIR: /app/chroma
+      STREETPARADE_CORS_ORIGINS: ""
+      STREETPARADE_CORS_ORIGIN_REGEX: "https?://.*"
+    volumes:
+      - ./data:/data
+      - ./chroma:/app/chroma
+      - ./.songs_cache:/app/.songs_cache
+      - ./hf-cache:/root/.cache/huggingface
+    restart: unless-stopped
+
+  streetparade26:
+    build:
+      context: ./fe-visualizer
+      dockerfile: Dockerfile.streetparade26
+      args:
+        VITE_API_BASE_URL: /streetparade26/api
+        VITE_BASE_PATH: /streetparade26/
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped

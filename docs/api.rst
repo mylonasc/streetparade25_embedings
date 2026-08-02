@@ -3,6 +3,50 @@ API Reference
 
 The public API is organized by pipeline responsibility.
 
+HTTP Endpoints
+--------------
+
+The FastAPI app in ``streetparade_embeddings.api`` exposes pipeline, visualization, and sharing endpoints.
+
+Pipeline endpoints include:
+
+* ``GET /health``
+* ``POST /artists``
+* ``GET /artists``
+* ``GET /artists/{artist_id}``
+* ``GET /artists/{artist_id}/tracks``
+* ``GET /tracks``
+* ``POST /artists/{artist_id}/download``
+* ``GET /download-jobs``
+* ``GET /download-jobs/{job_id}``
+* ``POST /download-jobs/{job_id}/cancel``
+* ``GET /tracks/{track_id}/samples``
+* ``GET /tracks/{track_id}/embeddings``
+* ``POST /similarity/track-embeddings``
+* ``POST /embeddings/compute``
+* ``POST /artists/{artist_id}/embeddings/compute``
+* ``GET /embedding-jobs``
+* ``GET /embedding-jobs/{job_id}``
+* ``POST /embedding-jobs/{job_id}/cancel``
+* ``GET /tracks/{track_id}/embedding``
+* ``GET /artists/{artist_id}/embeddings``
+
+Visualizer endpoints include:
+
+* ``POST /users``
+* ``GET /users/{username}``
+* ``POST /users/{username}/tracks``
+* ``GET /users/{username}/tracks``
+* ``GET /users/{username}/tracks/{user_track_id}/audio``
+* ``GET /user-track-jobs/{job_id}``
+* ``GET /visualization``
+* ``POST /layouts/recompute``
+* ``GET /layout-jobs/{job_id}``
+* ``POST /shares``
+* ``GET /shares/{token}``
+
+``POST /similarity/track-embeddings`` accepts cosine and euclidean metrics. ``POST /layouts/recompute`` accepts optional PCA, t-SNE, spectral clustering, and random-seed controls through :class:`streetparade_embeddings.schemas.LayoutRequest`.
+
 Configuration
 -------------
 

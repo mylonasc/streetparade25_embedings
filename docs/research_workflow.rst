@@ -12,6 +12,8 @@ Keep raw, intermediate, and generated files separate:
      streetparade_data.html
      artist_links.json
      .songs_cache/
+     chroma/
+     streetparade_embeddings.sqlite3
      outputs/
        artist_embeddings.npz
        artist_metadata.json
@@ -37,6 +39,9 @@ Pipeline Stages
 6. Aggregate artists.
    Track embeddings are averaged into one artist-level embedding.
 
+7. Explore and annotate the embedding space.
+   Use the backend-backed visualizer for user-submitted tracks, similarity links, share links, and configurable layout recomputation, or generate a static visualization snapshot for GitHub Pages.
+
 Outputs
 -------
 
@@ -52,5 +57,6 @@ Reproducibility Notes
 
 * Keep ``artist_links.json`` under version control if the set of downloaded tracks matters for analysis.
 * Keep ``.songs_cache`` out of version control; it contains downloaded media.
+* Keep live ``chroma/`` and ``*.sqlite3`` files out of version control unless intentionally publishing a frozen snapshot.
 * Record the model name and pipeline configuration used for any analysis result.
 * Prefer ``Device.CPU`` for deterministic local debugging and ``Device.CUDA`` or ``Device.AUTO`` for larger runs.

@@ -43,4 +43,5 @@ def pipeline_config(payload: ComputeRequest) -> dict[str, Any]:
         "only_missing": payload.only_missing,
         "artist_id": payload.artist_id,
         "max_tracks": payload.max_tracks,
+        "compute_segment_embeddings": payload.compute_segment_embeddings,
     }

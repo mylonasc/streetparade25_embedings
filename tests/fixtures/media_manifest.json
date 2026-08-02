@@ -1,0 +1,14 @@
+[
+  {
+    "name": "youtube_h4cvcfeseeg",
+    "source": "youtube",
+    "url": "https://www.youtube.com/watch?v=H4cvcFeSEeg",
+    "min_size_bytes": 100000
+  },
+  {
+    "name": "soundcloud_error303",
+    "source": "soundcloud",
+    "url": "https://soundcloud.com/asdf-asdf-asdf/error303",
+    "min_size_bytes": 100000
+  }
+]

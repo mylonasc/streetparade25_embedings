@@ -36,10 +36,11 @@ from .repositories import prepare_track_download as _prepare_track_download
 from .repositories import select_embedding_rows as _select_embedding_rows
 from .repositories import similarity_search as _similarity_search
 from .repositories import store_track_embedding as _store_track_embedding
+from .repositories import store_sample_embeddings as _store_sample_embeddings
 from .repositories import store_track_error as _store_track_error
 from .repositories import validate_artist_download_request as _validate_artist_download_request
 from .responses import track_response as _track_response
-from .schemas import ArtistCreate, ComputeRequest, DownloadJob, DownloadRequest, EmbeddingJob, SimilaritySearchRequest
+from .schemas import ArtistCreate, ComputeRequest, DownloadJob, DownloadRequest, EmbeddingJob, LayoutRequest, SimilaritySearchRequest
 from .schemas import set_job_clock
 from .soundcloud import DiscoveryMethod, discover_track_urls_requests_html, discover_track_urls_sync, download_track
 from .user_visualization import LayoutJob, UserTrackJob
@@ -168,19 +169,33 @@ class LazyClapEmbeddingService:
                 try:
                     async with self._lock:
                         model = await self._get_model(job.request)
-                        embedding = await asyncio.to_thread(
-                            model.embed_track,
-                            row["path"],
-                            sampling_rate=job.request.sampling_rate,
-                            chunk_seconds=job.request.chunk_seconds,
-                            stride_seconds=job.request.chunk_stride_seconds,
-                            max_chunks=job.request.max_chunks,
-                        )
+                        if job.request.compute_segment_embeddings:
+                            segment_embeddings = await asyncio.to_thread(
+                                model.embed_track_segments,
+                                row["path"],
+                                sampling_rate=job.request.sampling_rate,
+                                chunk_seconds=job.request.chunk_seconds,
+                                stride_seconds=job.request.chunk_stride_seconds,
+                                max_chunks=job.request.max_chunks,
+                            )
+                            embedding = segment_embeddings.mean(axis=0)
+                        else:
+                            segment_embeddings = None
+                            embedding = await asyncio.to_thread(
+                                model.embed_track,
+                                row["path"],
+                                sampling_rate=job.request.sampling_rate,
+                                chunk_seconds=job.request.chunk_seconds,
+                                stride_seconds=job.request.chunk_stride_seconds,
+                                max_chunks=job.request.max_chunks,
+                            )
                     if job.cancel_requested:
                         job.status = "cancelled"
                         job.finished_at = _now()
                         return
                     updated = await asyncio.to_thread(_store_track_embedding, row, embedding, job.request, _now)
+                    if segment_embeddings is not None:
+                        await asyncio.to_thread(_store_sample_embeddings, row, segment_embeddings, job.request, _now)
                 except Exception as exc:
                     updated = await asyncio.to_thread(_store_track_error, row["id"], str(exc), _now)
                 job.processed.append(_track_response(updated))
@@ -433,9 +448,9 @@ class LayoutService:
             pass
         self._worker = None
 
-    async def enqueue(self, username: str | None) -> LayoutJob:
+    async def enqueue(self, request: LayoutRequest) -> LayoutJob:
         await self.start()
-        job = LayoutJob(id=uuid4().hex, username=username)
+        job = LayoutJob(id=uuid4().hex, username=request.username, request=request)
         self._jobs[job.id] = job
         _save_layout_job(job)
         await self._queue.put(job.id)
@@ -459,7 +474,7 @@ class LayoutService:
         job.started_at = _now()
         _save_layout_job(job)
         try:
-            points = await asyncio.to_thread(_recompute_layout, job.username)
+            points = await asyncio.to_thread(_recompute_layout, job.username, job.request)
             job.status = "completed"
             job.finished_at = _now()
             _save_layout_job(job, points=points)
@@ -692,8 +707,8 @@ async def get_visualization(username: str | None = None) -> dict[str, Any]:
 
 
 @app.post("/layouts/recompute")
-async def recompute_visualization_layout(payload: dict[str, Any]) -> dict[str, Any]:
-    job = await layout_service.enqueue(payload.get("username"))
+async def recompute_visualization_layout(payload: LayoutRequest) -> dict[str, Any]:
+    job = await layout_service.enqueue(payload)
     return job.as_dict()
 
 

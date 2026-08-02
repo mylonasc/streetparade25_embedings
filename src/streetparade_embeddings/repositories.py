@@ -401,6 +401,107 @@ def store_track_embedding(row: dict[str, Any], embedding: np.ndarray, payload: C
         return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
 
 
+def store_sample_embeddings(
+    row: dict[str, Any],
+    embeddings: np.ndarray,
+    payload: ComputeRequest,
+    now: Callable[[], str],
+) -> list[dict[str, Any]]:
+    track_id = int(row["id"])
+    vectors = np.asarray(embeddings, dtype=np.float32)
+    if vectors.ndim != 2:
+        raise ValueError("segment embeddings must be a 2D array")
+
+    sample_strategy = sampling_strategy(payload)
+    sampling_hash = config_hash(sample_strategy)
+    model_config = embedding_model_config(payload)
+    model_hash = config_hash(model_config)
+    run_config = pipeline_config(payload)
+    vector_store = get_vector_store()
+    stored: list[dict[str, Any]] = []
+
+    with connect() as conn:
+        samples = conn.execute(
+            """
+            SELECT * FROM track_samples
+            WHERE track_id = ?
+            ORDER BY chunk_index
+            LIMIT ?
+            """,
+            (track_id, vectors.shape[0]),
+        ).fetchall()
+        if len(samples) != vectors.shape[0]:
+            raise ValueError(f"expected {len(samples)} segment embeddings, got {vectors.shape[0]}")
+
+        for sample, vector in zip(samples, vectors):
+            timestamp = now()
+            embedding_uuid = uuid4().hex
+            vector_id = f"sample:{sample['id']}:embedding:{embedding_uuid}"
+            metadata = {
+                "vector_id": vector_id,
+                "track_id": track_id,
+                "track_uuid": row.get("uuid"),
+                "track_sample_id": int(sample["id"]),
+                "chunk_index": int(sample["chunk_index"]),
+                "start_seconds": float(sample["start_seconds"]),
+                "duration_seconds": float(sample["duration_seconds"]),
+                "embedding_backend": payload.embedding_backend,
+                "embedding_model": payload.model_name,
+                "embedding_model_config_hash": model_hash,
+                "sampling_strategy_hash": sampling_hash,
+                "embedding_dim": int(vector.shape[0]),
+                "embedded_at": timestamp,
+            }
+            vector_store.upsert_embedding(vector_id, vector, metadata)
+            conn.execute(
+                """
+                INSERT INTO sample_embeddings (
+                    uuid, vector_id, track_id, track_sample_id, chunk_index, start_seconds, duration_seconds,
+                    embedding_backend, embedding_model, embedding_model_config, embedding_model_config_hash,
+                    sampling_strategy, sampling_strategy_hash, pipeline_config, embedding_dim, embedded_at,
+                    last_error, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+                ON CONFLICT(track_sample_id, embedding_backend, embedding_model, embedding_model_config_hash, sampling_strategy_hash)
+                DO UPDATE SET
+                    uuid = excluded.uuid,
+                    vector_id = excluded.vector_id,
+                    chunk_index = excluded.chunk_index,
+                    start_seconds = excluded.start_seconds,
+                    duration_seconds = excluded.duration_seconds,
+                    embedding_model_config = excluded.embedding_model_config,
+                    sampling_strategy = excluded.sampling_strategy,
+                    pipeline_config = excluded.pipeline_config,
+                    embedding_dim = excluded.embedding_dim,
+                    embedded_at = excluded.embedded_at,
+                    last_error = NULL,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    embedding_uuid,
+                    vector_id,
+                    track_id,
+                    int(sample["id"]),
+                    int(sample["chunk_index"]),
+                    float(sample["start_seconds"]),
+                    float(sample["duration_seconds"]),
+                    payload.embedding_backend,
+                    payload.model_name,
+                    canonical_json(model_config),
+                    model_hash,
+                    canonical_json(sample_strategy),
+                    sampling_hash,
+                    canonical_json(run_config),
+                    int(vector.shape[0]),
+                    timestamp,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            stored.append(row_dict(conn.execute("SELECT * FROM sample_embeddings WHERE vector_id = ?", (vector_id,)).fetchone()))
+    return stored
+
+
 def store_track_error(track_id: int, error: str, now: Callable[[], str]) -> sqlite3.Row:
     with connect() as conn:
         conn.execute("UPDATE tracks SET last_error = ?, updated_at = ? WHERE id = ?", (error, now(), track_id))
@@ -504,7 +605,77 @@ def embedding_row_by_vector_id(vector_id: str) -> dict[str, Any] | None:
     return row_dict(row) if row is not None else None
 
 
+def similarity_query_vector(payload: SimilaritySearchRequest) -> np.ndarray:
+    vector_store = get_vector_store()
+    if payload.embedding is not None:
+        return np.asarray(payload.embedding, dtype=np.float32)
+    vector_ids = payload.vector_ids or []
+    if payload.track_ids:
+        vector_ids = vector_ids + latest_vector_ids_for_tracks(payload.track_ids)
+    if not vector_ids:
+        raise HTTPException(status_code=400, detail="provide embedding, vector_ids, or track_ids")
+    vectors = [vector_store.get_embedding(vector_id) for vector_id in vector_ids]
+    vectors = [vector for vector in vectors if vector is not None]
+    if not vectors:
+        raise HTTPException(status_code=404, detail="query embeddings not found")
+    return np.mean(np.asarray(vectors, dtype=np.float32), axis=0)
+
+
+def latest_similarity_rows(payload: SimilaritySearchRequest) -> list[dict[str, Any]]:
+    clauses = [
+        "te.id = (SELECT id FROM track_embeddings latest WHERE latest.track_id = te.track_id ORDER BY latest.embedded_at DESC, latest.id DESC LIMIT 1)"
+    ]
+    params: list[Any] = []
+    if payload.artist_id is not None:
+        clauses.append("te.artist_id = ?")
+        params.append(payload.artist_id)
+    if payload.embedding_backend is not None:
+        clauses.append("te.embedding_backend = ?")
+        params.append(payload.embedding_backend)
+    if payload.embedding_model is not None:
+        clauses.append("te.embedding_model = ?")
+        params.append(payload.embedding_model)
+    if payload.sampling_strategy_hash is not None:
+        clauses.append("te.sampling_strategy_hash = ?")
+        params.append(payload.sampling_strategy_hash)
+    with connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT te.*, tracks.url, tracks.path, artists.name AS artist_name
+            FROM track_embeddings te
+            JOIN tracks ON tracks.id = te.track_id
+            JOIN artists ON artists.id = te.artist_id
+            WHERE {' AND '.join(clauses)}
+            """,
+            params,
+        ).fetchall()
+    return [row_dict(row) for row in rows]
+
+
+def euclidean_similarity_search(payload: SimilaritySearchRequest) -> list[dict[str, Any]]:
+    vector_store = get_vector_store()
+    query = similarity_query_vector(payload)
+    results = []
+    for row in latest_similarity_rows(payload):
+        vector = vector_store.get_embedding(row["vector_id"])
+        if vector is None:
+            continue
+        distance = float(np.linalg.norm(query - np.asarray(vector, dtype=np.float32)))
+        results.append(
+            {
+                "vector_id": row["vector_id"],
+                "distance": distance,
+                "similarity": 1.0 / (1.0 + distance),
+                "metadata": {"track_id": row["track_id"], "artist_id": row["artist_id"]},
+                "track_embedding": row,
+            }
+        )
+    return sorted(results, key=lambda item: item["distance"])[: payload.n_results]
+
+
 def similarity_search(payload: SimilaritySearchRequest) -> list[dict[str, Any]]:
+    if payload.metric == "euclidean":
+        return euclidean_similarity_search(payload)
     vector_store = get_vector_store()
     where = similarity_where(payload)
     if payload.embedding is not None:
