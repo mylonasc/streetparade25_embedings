@@ -19,7 +19,7 @@ from .db import ensure_entity_uuids as _ensure_entity_uuids
 from .db import init_db
 from .embeddings import ClapEmbeddingModel
 from .preferences import current_preferences as _current_preferences
-from .preferences import record_preference_event as _record_preference_event
+from .preferences import set_preference as _set_preference
 from .provenance import config_hash as _config_hash
 from .repositories import complete_track_download as _complete_track_download
 from .repositories import create_or_update_artist as _create_or_update_artist
@@ -42,7 +42,7 @@ from .repositories import store_sample_embeddings as _store_sample_embeddings
 from .repositories import store_track_error as _store_track_error
 from .repositories import validate_artist_download_request as _validate_artist_download_request
 from .responses import track_response as _track_response
-from .schemas import ArtistCreate, ComputeRequest, DownloadJob, DownloadRequest, EmbeddingJob, LayoutRequest, PreferenceEventRequest, SimilaritySearchRequest
+from .schemas import ArtistCreate, ComputeRequest, DownloadJob, DownloadRequest, EmbeddingJob, LayoutRequest, PreferenceRequest, SimilaritySearchRequest
 from .schemas import set_job_clock
 from .soundcloud import DiscoveryMethod, discover_track_urls_requests_html, discover_track_urls_sync, download_track
 from .user_visualization import LayoutJob, UserTrackJob
@@ -681,10 +681,10 @@ async def list_user_preferences(username: str) -> dict[str, Any]:
     return {"username": username, "preferences": _current_preferences(username)}
 
 
-@app.post("/users/{username}/preferences/events")
-async def create_user_preference_event(username: str, payload: PreferenceEventRequest) -> dict[str, Any]:
+@app.post("/users/{username}/preferences")
+async def set_user_preference(username: str, payload: PreferenceRequest) -> dict[str, Any]:
     init_db()
-    return _record_preference_event(username, payload, _now)
+    return _set_preference(username, payload, _now)
 
 
 @app.get("/users/{username}/tracks/{user_track_id}/audio")

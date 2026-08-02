@@ -167,13 +167,31 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                point_id TEXT NOT NULL,
+                target_kind TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                track_id INTEGER,
+                user_track_id INTEGER,
+                vector_id TEXT,
+                value TEXT NOT NULL CHECK(value IN ('up', 'down', 'clear')),
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, target_kind, target_id)
+            );
+
             CREATE INDEX IF NOT EXISTS preference_events_user_target_idx
                 ON preference_events(user_id, target_kind, target_id, id);
+            CREATE INDEX IF NOT EXISTS user_preferences_user_target_idx
+                ON user_preferences(user_id, target_kind, target_id);
             """
         )
         ensure_artist_columns(conn)
         ensure_track_columns(conn)
         ensure_sample_embedding_table(conn)
+        ensure_preference_table(conn)
         ensure_uuid_indexes(conn)
         ensure_entity_uuids(conn)
 
@@ -231,6 +249,40 @@ def ensure_sample_embedding_table(conn: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             UNIQUE(track_sample_id, embedding_backend, embedding_model, embedding_model_config_hash, sampling_strategy_hash)
         );
+        """
+    )
+
+
+def ensure_preference_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO user_preferences (
+            user_id, username, point_id, target_kind, target_id, track_id, user_track_id, vector_id, value, updated_at
+        )
+        SELECT pe.user_id, pe.username, pe.point_id, pe.target_kind, pe.target_id,
+               pe.track_id, pe.user_track_id, pe.vector_id, pe.value, pe.created_at
+        FROM preference_events pe
+        JOIN (
+            SELECT user_id, target_kind, target_id, MAX(id) AS id
+            FROM preference_events
+            GROUP BY user_id, target_kind, target_id
+        ) latest ON latest.id = pe.id
+        """
+    )
+    conn.execute(
+        """
+        DELETE FROM preference_events
+        WHERE id NOT IN (
+            SELECT MAX(id)
+            FROM preference_events
+            GROUP BY user_id, target_kind, target_id
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS preference_events_user_target_unique
+            ON preference_events(user_id, target_kind, target_id)
         """
     )
 

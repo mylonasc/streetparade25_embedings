@@ -42,8 +42,18 @@ export function markKey(point) {
 }
 
 export function preferenceTarget(point) {
-  if (!point || (point.kind !== 'track' && point.kind !== 'user_track')) return null;
+  if (!point || !['track', 'user_track', 'artist'].includes(point.kind)) return null;
   const metadata = point.metadata || {};
+  if (point.kind === 'artist') {
+    return {
+      point_id: point.id,
+      target_kind: 'artist',
+      target_id: String(point.id),
+      track_id: null,
+      user_track_id: null,
+      vector_id: null,
+    };
+  }
   if (point.kind === 'user_track') {
     const userTrackId = metadata.id ?? point.id?.replace(/^user-track-/, '');
     return {

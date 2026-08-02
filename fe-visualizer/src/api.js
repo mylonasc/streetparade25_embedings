@@ -32,3 +32,16 @@ export async function request(path, options = {}) {
   if (!response.ok) throw new Error(data?.detail || response.statusText);
   return data;
 }
+
+export async function getUserPreferences(username) {
+  const data = await request(`/users/${encodeURIComponent(username)}/preferences`);
+  return data.preferences || {};
+}
+
+export async function setUserPreference(username, target, value) {
+  const data = await request(`/users/${encodeURIComponent(username)}/preferences`, {
+    method: 'POST',
+    body: JSON.stringify({...target, value}),
+  });
+  return data.preferences || {};
+}

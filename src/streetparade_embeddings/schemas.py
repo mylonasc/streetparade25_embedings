@@ -83,9 +83,9 @@ class LayoutRequest(BaseModel):
 PreferenceValue = Literal["up", "down", "clear"]
 
 
-class PreferenceEventRequest(BaseModel):
+class PreferenceRequest(BaseModel):
     point_id: str = _Field(min_length=1)
-    target_kind: Literal["track", "user_track"]
+    target_kind: Literal["track", "user_track", "artist"]
     target_id: str = _Field(min_length=1)
     value: PreferenceValue
     track_id: int | None = None

@@ -3,20 +3,28 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .db import connect
-from .schemas import PreferenceEventRequest
+from .schemas import PreferenceRequest
 from .user_visualization import get_or_create_user, normalize_username
 
 
-def record_preference_event(username: str, payload: PreferenceEventRequest, now: Callable[[], str]) -> dict[str, Any]:
+def set_preference(username: str, payload: PreferenceRequest, now: Callable[[], str]) -> dict[str, Any]:
     user = get_or_create_user(username)
     timestamp = now()
     with connect() as conn:
         conn.execute(
             """
-            INSERT INTO preference_events (
-                user_id, username, point_id, target_kind, target_id, track_id, user_track_id, vector_id, value, created_at
+            INSERT INTO user_preferences (
+                user_id, username, point_id, target_kind, target_id, track_id, user_track_id, vector_id, value, updated_at
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, target_kind, target_id) DO UPDATE SET
+                username = excluded.username,
+                point_id = excluded.point_id,
+                track_id = excluded.track_id,
+                user_track_id = excluded.user_track_id,
+                vector_id = excluded.vector_id,
+                value = excluded.value,
+                updated_at = excluded.updated_at
             """,
             (
                 user["id"],
@@ -31,9 +39,14 @@ def record_preference_event(username: str, payload: PreferenceEventRequest, now:
                 timestamp,
             ),
         )
-        event_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
-        event = conn.execute("SELECT * FROM preference_events WHERE id = ?", (event_id,)).fetchone()
-    return {**dict(event), "current": current_preferences(username)}
+        row = conn.execute(
+            """
+            SELECT * FROM user_preferences
+            WHERE user_id = ? AND target_kind = ? AND target_id = ?
+            """,
+            (user["id"], payload.target_kind, payload.target_id),
+        ).fetchone()
+    return {**dict(row), "preferences": current_preferences(username)}
 
 
 def current_preferences(username: str) -> dict[str, str]:
@@ -42,15 +55,10 @@ def current_preferences(username: str) -> dict[str, str]:
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT pe.*
-            FROM preference_events pe
-            JOIN (
-                SELECT target_kind, target_id, MAX(id) AS id
-                FROM preference_events
-                WHERE user_id = ?
-                GROUP BY target_kind, target_id
-            ) latest ON latest.id = pe.id
-            ORDER BY pe.id
+            SELECT *
+            FROM user_preferences
+            WHERE user_id = ?
+            ORDER BY id
             """,
             (user["id"],),
         ).fetchall()

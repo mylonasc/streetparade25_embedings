@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as d3 from 'd3';
-import {request} from './api.js';
+import {getUserPreferences, request, setUserPreference} from './api.js';
 import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalNumber} from './layoutOptions.js';
 import {buildSearchIndex, searchResults} from './search.js';
 import {isMarked, markKey, modelSummary, playlistForPoint, preferenceKeyForPoint, preferenceTarget, visibleMetadataEntries} from './selection.js';
@@ -31,6 +31,7 @@ function App() {
   const [similarityEdges, setSimilarityEdges] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCluster, setSelectedCluster] = useState(null);
+  const [colorByPreference, setColorByPreference] = useState(false);
   const [showArtists, setShowArtists] = useState(true);
   const [showSongs, setShowSongs] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -43,7 +44,7 @@ function App() {
     const [viz, tracks, preferences] = await Promise.all([
       request(`/visualization?username=${encodeURIComponent(activeUsername)}`),
       request(`/users/${encodeURIComponent(activeUsername)}/tracks`),
-      request(`/users/${encodeURIComponent(activeUsername)}/preferences`),
+      getUserPreferences(activeUsername),
     ]);
     setPoints(viz.points || []);
     setStats({
@@ -53,7 +54,7 @@ function App() {
       user_point_count: viz.user_point_count || 0,
     });
     setUserTracks(tracks || []);
-    setThumbPreferences(preferences.preferences || {});
+    setThumbPreferences(preferences || {});
   }
 
   async function saveUsername(event) {
@@ -131,11 +132,7 @@ function App() {
       return next;
     });
     try {
-      const response = await request(`/users/${encodeURIComponent(username)}/preferences/events`, {
-        method: 'POST',
-        body: JSON.stringify({...target, value: nextValue || 'clear'}),
-      });
-      setThumbPreferences(response.current || {});
+      setThumbPreferences(await setUserPreference(username, target, nextValue || 'clear'));
     } catch (err) {
       setError(err.message);
       await loadAll();
@@ -167,6 +164,23 @@ function App() {
     if (!songs.length) return;
     const candidates = selected ? songs.filter((point) => point.id !== selected.id) : songs;
     selectPoint(candidates[Math.floor(Math.random() * candidates.length)] || songs[0], {focus});
+  }
+
+  function selectArtistForSong(point) {
+    const artistName = point?.metadata?.artist_name || point?.metadata?.artist;
+    if (!artistName) return;
+    const artistPoint = points.find((candidate) => candidate.kind === 'artist' && (candidate.metadata?.artist_name || candidate.label) === artistName);
+    if (artistPoint) selectPoint(artistPoint, {focus: true});
+  }
+
+  function selectRandomArtistSong(point) {
+    const tracks = point?.metadata?.tracks || [];
+    const ids = tracks.map((track) => track.id).filter(Boolean);
+    const songs = ids
+      .map((id) => points.find((candidate) => candidate.id === id))
+      .filter((candidate) => candidate && (candidate.kind === 'track' || candidate.kind === 'user_track'));
+    if (!songs.length) return;
+    selectPoint(songs[Math.floor(Math.random() * songs.length)], {focus: true});
   }
 
   function undoSelection() {
@@ -364,7 +378,8 @@ function App() {
                   <option value="">All clusters</option>
                   {clusterOptions.map((cluster) => <option key={cluster} value={cluster}>Cluster {cluster}</option>)}
                 </select>
-                {selectedCluster !== null && <button type="button" className="secondary" onClick={() => setSelectedCluster(null)}>Clear</button>}
+                <button type="button" className={`secondary toggle-button ${colorByPreference ? 'active' : ''}`} onClick={() => setColorByPreference((value) => !value)}>Liked</button>
+                {(selectedCluster !== null || colorByPreference) && <button type="button" className="secondary" onClick={() => { setSelectedCluster(null); setColorByPreference(false); }}>Clear</button>}
               </div>
               {searchQuery.trim() && (
                 <div className="search-results">
@@ -387,7 +402,7 @@ function App() {
                 No Street Parade vectors loaded. Check that the API can access the Chroma vector store, especially `./chroma` when using Docker.
               </div>
             )}
-            <Visualizer points={points} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
+            <Visualizer points={points} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} colorByPreference={colorByPreference} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onSelectArtist={selectArtistForSong} onPlayArtistSong={selectRandomArtistSong} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
           </section>
 
           <section className={`panel selection-panel ${(selected || playbackPoint) ? 'has-selection' : ''} ${selectionMinimized ? 'is-minimized' : ''}`} aria-live="polite">
@@ -495,13 +510,22 @@ function selectRandomLinkedSong(edges, points, selected, selectPoint) {
 
 function pointTooltipHtml(point, thumbValue = null) {
   const metadata = point.metadata || {};
+  const thumbs = `<button type="button" data-tooltip-action="thumb-up" class="thumb-button thumb-up ${thumbValue === 'up' ? 'active' : ''}" aria-pressed="${thumbValue === 'up'}" aria-label="Thumbs up">👍</button><button type="button" data-tooltip-action="thumb-down" class="thumb-button thumb-down ${thumbValue === 'down' ? 'active' : ''}" aria-pressed="${thumbValue === 'down'}" aria-label="Thumbs down">👎</button>`;
   if (point.kind === 'track' || point.kind === 'user_track') {
     const rows = [
       ['Artist', metadata.artist_name || metadata.artist || 'Unknown'],
       ['Song', metadata.title || point.label],
       ['Cluster', point.cluster],
     ];
-    return `<strong>${escapeHtml(metadata.title || point.label)}</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}<span class="thumb-status ${thumbValue ? `is-${thumbValue}` : ''}">${escapeHtml(thumbStatusLabel(thumbValue))}</span><div class="tooltip-actions"><button type="button" data-tooltip-action="thumb-up" class="thumb-up ${thumbValue === 'up' ? 'active' : ''}" aria-pressed="${thumbValue === 'up'}" aria-label="Thumbs up">${thumbValue === 'up' ? 'Liked' : '👍'}</button><button type="button" data-tooltip-action="thumb-down" class="thumb-down ${thumbValue === 'down' ? 'active' : ''}" aria-pressed="${thumbValue === 'down'}" aria-label="Thumbs down">${thumbValue === 'down' ? 'Disliked' : '👎'}</button><button type="button" data-tooltip-action="play-similar" aria-label="Play connected song">▶</button><button type="button" data-tooltip-action="random-song" aria-label="Random song">⏭</button></div>`;
+    return `<strong>${escapeHtml(metadata.title || point.label)}</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}<div class="tooltip-actions">${thumbs}<button type="button" data-tooltip-action="select-artist" aria-label="Select artist">Artist</button><button type="button" data-tooltip-action="play-similar" aria-label="Play connected song">▶</button><button type="button" data-tooltip-action="random-song" aria-label="Random song">⏭</button></div>`;
+  }
+  if (point.kind === 'artist') {
+    const rows = [
+      ['Artist', metadata.artist_name || point.label],
+      ['Tracks', metadata.track_count || (metadata.tracks || []).length || 0],
+      ['Cluster', point.cluster],
+    ];
+    return `<strong>${escapeHtml(point.label)}</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}<div class="tooltip-actions">${thumbs}<button type="button" data-tooltip-action="artist-song" aria-label="Select artist song">▶ song</button><button type="button" data-tooltip-action="random-song" aria-label="Random song">⏭</button></div>`;
   }
   const rows = [];
   if (metadata.artist_name || metadata.artist) rows.push(['Artist', metadata.artist_name || metadata.artist]);
@@ -511,12 +535,6 @@ function pointTooltipHtml(point, thumbValue = null) {
   if (metadata.cluster !== undefined || point.cluster !== undefined) rows.push(['Cluster', point.cluster]);
   if (metadata.url || metadata.source_url) rows.push(['URL', metadata.url || metadata.source_url]);
   return `<strong>${escapeHtml(point.label)}</strong><span>${escapeHtml(point.kind)}</span>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}`;
-}
-
-function thumbStatusLabel(value) {
-  if (value === 'up') return 'Preference: liked';
-  if (value === 'down') return 'Preference: disliked';
-  return 'Preference: not rated';
 }
 
 function edgeTooltipHtml(edge, byId) {
@@ -530,6 +548,18 @@ function edgeTooltipHtml(edge, byId) {
   if (edge.similarity !== null && edge.similarity !== undefined) rows.push(['Similarity', Number(edge.similarity).toFixed(4)]);
   if (edge.distance !== null && edge.distance !== undefined) rows.push(['Distance', Number(edge.distance).toFixed(4)]);
   return `<strong>Similarity edge</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}`;
+}
+
+function pointFill(point, clusterColor, thumbPreferences, colorByPreference) {
+  if (colorByPreference) {
+    const preference = thumbPreferences?.[preferenceKeyForPoint(point)];
+    if (preference === 'up') return '#85f5c4';
+    if (preference === 'down') return '#ff5c35';
+    return point.kind === 'artist' ? 'rgba(133, 245, 196, 0.42)' : 'rgba(154, 168, 189, 0.46)';
+  }
+  if (point.kind === 'user_track') return '#ff5c35';
+  if (point.kind === 'artist') return '#85f5c4';
+  return clusterColor(point.cluster);
 }
 
 function showTooltipAt(tooltip, anchorElement, x, y, html) {
@@ -749,7 +779,7 @@ function UsernameGate({draftUsername, setDraftUsername, saveUsername, error}) {
   );
 }
 
-function Visualizer({points, selected, setSelected, marks, thumbPreferences, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onPlaySimilar, onRandomSong}) {
+function Visualizer({points, selected, setSelected, marks, thumbPreferences, colorByPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong}) {
   const ref = useRef(null);
   const tooltipRef = useRef(null);
   const transformRef = useRef(d3.zoomIdentity);
@@ -801,6 +831,7 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, onT
       if (hasSearch && !searchMatchIds?.has(point.id)) alpha = Math.min(alpha, 0.22);
       if (selectedCluster !== null && point.cluster !== selectedCluster) alpha = Math.min(alpha, 0.18);
       if (selected?.id && !isSelected) alpha = Math.min(alpha, 0.24);
+      if (colorByPreference && !thumbPreferences?.[preferenceKeyForPoint(point)]) alpha = Math.min(alpha, 0.36);
       return {
         isSelected,
         isMarked: isMarked(point, marks),
@@ -825,7 +856,7 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, onT
       context.beginPath();
       symbol.type(point.kind === 'user_track' ? d3.symbolStar : point.kind === 'artist' ? d3.symbolDiamond : d3.symbolCircle).size(size)();
       context.globalAlpha = state.alpha;
-      context.fillStyle = point.kind === 'user_track' ? '#ff5c35' : point.kind === 'artist' ? '#85f5c4' : color(point.cluster);
+      context.fillStyle = pointFill(point, color, thumbPreferences, colorByPreference);
       context.fill();
       context.lineWidth = state.isSelected ? 4 : state.isLinked || state.isSearchMatch || state.isClusterMatch ? 3 : 1.2;
       context.strokeStyle = state.isSelected ? '#fff' : state.isSearchMatch || state.isClusterMatch ? '#ffd166' : state.isLinked || state.isMarked ? '#85f5c4' : 'rgba(255,255,255,0.85)';
@@ -984,6 +1015,8 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, onT
       const activePoint = activeTooltipPointRef.current;
       if (action === 'thumb-up' && activePoint) onThumb?.(activePoint, 'up');
       if (action === 'thumb-down' && activePoint) onThumb?.(activePoint, 'down');
+      if (action === 'select-artist' && activePoint) onSelectArtist?.(activePoint);
+      if (action === 'artist-song' && activePoint) onPlayArtistSong?.(activePoint);
       if (action === 'play-similar') onPlaySimilar?.();
       if (action === 'random-song') onRandomSong?.();
     }
@@ -1046,7 +1079,7 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, onT
       tooltipRef.current?.removeEventListener('mouseleave', handleTooltipLeave);
       selection.on('.zoom', null);
     };
-  }, [points, selected, marks, thumbPreferences, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onPlaySimilar, onRandomSong, sizeVersion]);
+  }, [points, selected, marks, thumbPreferences, colorByPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong, sizeVersion]);
 
   return <><canvas ref={ref} className="plot" /><div ref={tooltipRef} className="tooltip" hidden /></>;
 }
@@ -1072,11 +1105,10 @@ function Selection({point, thumbValue, onThumb, onMark, onUndo, onRedo, canUndo,
       </div>
       <p className="shortcut-hint">Shortcuts: Ctrl+Z undo, Ctrl+R redo.</p>
       <div className="selection-actions">
-        {(point.kind === 'track' || point.kind === 'user_track') && (
+        {['track', 'user_track', 'artist'].includes(point.kind) && (
           <>
-            <div className={`selection-thumb-status ${thumbValue ? `is-${thumbValue}` : ''}`}>{thumbStatusLabel(thumbValue)}</div>
-            <button type="button" className={`secondary thumb-button thumb-up ${thumbValue === 'up' ? 'active' : ''}`} onClick={() => onThumb('up')} aria-pressed={thumbValue === 'up'}>{thumbValue === 'up' ? 'Liked' : 'Like'}</button>
-            <button type="button" className={`secondary thumb-button thumb-down ${thumbValue === 'down' ? 'active' : ''}`} onClick={() => onThumb('down')} aria-pressed={thumbValue === 'down'}>{thumbValue === 'down' ? 'Disliked' : 'Dislike'}</button>
+            <button type="button" className={`secondary thumb-button thumb-up ${thumbValue === 'up' ? 'active' : ''}`} onClick={() => onThumb('up')} aria-pressed={thumbValue === 'up'} aria-label="Thumbs up">👍</button>
+            <button type="button" className={`secondary thumb-button thumb-down ${thumbValue === 'down' ? 'active' : ''}`} onClick={() => onThumb('down')} aria-pressed={thumbValue === 'down'} aria-label="Thumbs down">👎</button>
           </>
         )}
         <button type="button" onClick={onMark}>Toggle preference mark</button>

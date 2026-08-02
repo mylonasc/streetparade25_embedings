@@ -203,33 +203,38 @@ def test_list_tracks_is_paged_for_python_api_and_repository(monkeypatch, tmp_pat
     assert [track["url"] for track in second_page["tracks"]] == ["https://example.com/2"]
 
 
-def test_user_preference_events_fold_to_current_state(monkeypatch, tmp_path):
+def test_user_preference_updates_current_state(monkeypatch, tmp_path):
     monkeypatch.setenv("STREETPARADE_DB", str(tmp_path / "preferences.sqlite3"))
 
     async def run():
-        up = await api.create_user_preference_event(
+        up = await api.set_user_preference(
             "listener",
-            api.PreferenceEventRequest(point_id="track-4", target_kind="track", target_id="4", track_id=4, value="up"),
+            api.PreferenceRequest(point_id="track-4", target_kind="track", target_id="4", track_id=4, value="up"),
         )
-        down = await api.create_user_preference_event(
+        down = await api.set_user_preference(
             "listener",
-            api.PreferenceEventRequest(point_id="track-4", target_kind="track", target_id="4", track_id=4, value="down"),
+            api.PreferenceRequest(point_id="track-4", target_kind="track", target_id="4", track_id=4, value="down"),
         )
-        cleared = await api.create_user_preference_event(
+        cleared = await api.set_user_preference(
             "listener",
-            api.PreferenceEventRequest(point_id="track-4", target_kind="track", target_id="4", track_id=4, value="clear"),
+            api.PreferenceRequest(point_id="track-4", target_kind="track", target_id="4", track_id=4, value="clear"),
         )
-        return up, down, cleared, await api.list_user_preferences("listener")
+        artist = await api.set_user_preference(
+            "listener",
+            api.PreferenceRequest(point_id="artist-nina", target_kind="artist", target_id="artist-nina", value="up"),
+        )
+        return up, down, cleared, artist, await api.list_user_preferences("listener")
 
-    up, down, cleared, current = asyncio.run(run())
+    up, down, cleared, artist, current = asyncio.run(run())
 
-    assert up["current"] == {"track:4": "up"}
-    assert down["current"] == {"track:4": "down"}
-    assert cleared["current"] == {}
-    assert current["preferences"] == {}
+    assert up["preferences"] == {"track:4": "up"}
+    assert down["preferences"] == {"track:4": "down"}
+    assert cleared["preferences"] == {}
+    assert artist["preferences"] == {"artist:artist-nina": "up"}
+    assert current["preferences"] == {"artist:artist-nina": "up"}
     with api._connect() as conn:
-        count = conn.execute("SELECT COUNT(*) AS count FROM preference_events").fetchone()["count"]
-    assert count == 3
+        count = conn.execute("SELECT COUNT(*) AS count FROM user_preferences").fetchone()["count"]
+    assert count == 2
 
 
 def test_download_endpoint_queues_and_exposes_downloading_then_completed(monkeypatch, tmp_path):
