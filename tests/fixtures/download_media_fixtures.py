@@ -34,6 +34,15 @@ def write_index(cache_dir: Path, index: dict[str, dict[str, Any]]) -> None:
     (cache_dir / INDEX_NAME).write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def write_failures(cache_dir: Path, failures: dict[str, str]) -> None:
+    if failures:
+        (cache_dir / "media_failures.json").write_text(json.dumps(failures, indent=2, sort_keys=True), encoding="utf-8")
+        return
+    failure_path = cache_dir / "media_failures.json"
+    if failure_path.exists():
+        failure_path.unlink()
+
+
 def cached_entry_is_valid(cache_dir: Path, entry: dict[str, Any], cached: dict[str, Any] | None) -> bool:
     if not cached:
         return False
@@ -88,6 +97,7 @@ def main() -> int:
     cache_dir = Path(sys.argv[2])
     manifest = load_manifest(manifest_path)
     index = load_index(cache_dir)
+    failures: dict[str, str] = {}
 
     for entry in manifest:
         name = entry["name"]
@@ -99,11 +109,19 @@ def main() -> int:
             print(f"cached {name}: {path}")
             continue
 
-        downloaded = download_entry(cache_dir, entry)
+        try:
+            downloaded = download_entry(cache_dir, entry)
+        except Exception as exc:
+            if entry.get("required", True):
+                raise
+            failures[name] = str(exc)
+            print(f"optional fixture unavailable {name}: {exc}", file=sys.stderr)
+            continue
         index[name] = downloaded
         print(f"downloaded {name}: {cache_dir / downloaded['relative_path']}")
 
     write_index(cache_dir, index)
+    write_failures(cache_dir, failures)
     return 0
 
 

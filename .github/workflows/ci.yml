@@ -58,15 +58,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e '.[dev]'
 
-      - name: Restore media fixture cache
-        id: media-cache
-        uses: actions/cache@v4
-        with:
-          path: .ci-media-cache
-          key: media-fixtures-${{ runner.os }}-${{ hashFiles('tests/fixtures/media_manifest.json') }}
-
-      - name: Populate missing media fixtures
-        run: python tests/fixtures/download_media_fixtures.py tests/fixtures/media_manifest.json .ci-media-cache
+      - name: Download media fixture artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download ci-media-fixtures \
+            --repo "${{ github.repository }}" \
+            --pattern media-fixtures.zip \
+            --dir /tmp
+          unzip -q /tmp/media-fixtures.zip -d .
 
       - name: Run media fixture tests
         run: pytest tests/test_media_fixtures.py

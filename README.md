@@ -194,7 +194,7 @@ GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pushes an
 Jobs are split by project area:
 
 - `backend-tests`: installs Python dependencies and runs the fast backend test subset: `tests/test_audio.py`, `tests/test_pipeline.py`, and `tests/test_api_embedding_service.py`.
-- `media-fixture-tests`: restores `.ci-media-cache` from GitHub Actions cache, downloads any missing files listed in `tests/fixtures/media_manifest.json`, and validates the cached MP3 fixtures.
+- `media-fixture-tests`: downloads `media-fixtures.zip` from the `ci-media-fixtures` GitHub release, extracts it into `.ci-media-cache`, and validates the cached MP3 fixtures.
 - `frontend-admin`: runs `npm ci` and `npm run build` in `fe-admin`.
 - `frontend-visualizer`: runs `npm ci`, the default visualizer build, and the `/streetparade26/` prefixed visualizer build in `fe-visualizer`.
 - `docker-smoke`: validates both Compose files, builds the `/streetparade26/` visualizer image, checks nginx syntax, verifies `/` returns `404`, verifies `/streetparade26/` serves prefixed assets, and verifies `/streetparade26/api/*` proxies to an `api:8000` upstream with the prefix stripped.
@@ -205,14 +205,13 @@ Run the same backend checks locally with:
 pytest tests/test_audio.py tests/test_pipeline.py tests/test_api_embedding_service.py
 ```
 
-Run the media fixture cache workflow locally with:
+Run the media fixture cache workflow locally with an already extracted fixture cache:
 
 ```bash
-python tests/fixtures/download_media_fixtures.py tests/fixtures/media_manifest.json .ci-media-cache
 MEDIA_FIXTURE_CACHE=.ci-media-cache pytest tests/test_media_fixtures.py
 ```
 
-The media fixture job only downloads when the manifest changes or the cache is missing. The downloaded MP3s are not committed to the repository. Keep `tests/fixtures/media_manifest.json` small and use stable public links. The direct live-download test file remains available for explicit local checks with `RUN_LIVE_DOWNLOAD_TESTS=1 pytest tests/test_download_links.py`.
+The fixture MP3s are not committed to the repository. They are stored as a zipped GitHub release asset named `media-fixtures.zip` on the `ci-media-fixtures` release. To refresh the ZIP locally, run `python tests/fixtures/download_media_fixtures.py tests/fixtures/media_manifest.json .ci-media-cache`, zip the contents of `.ci-media-cache`, and replace the release asset. The direct live-download test file remains available for explicit local checks with `RUN_LIVE_DOWNLOAD_TESTS=1 pytest tests/test_download_links.py`.
 
 ## `/streetparade26/` Deployment
 
