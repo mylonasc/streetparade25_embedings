@@ -20,6 +20,18 @@ from .vectorstore import get_vector_store
 
 
 def get_artist(conn: sqlite3.Connection, artist_id: int) -> sqlite3.Row:
+    """Load an artist row or raise a FastAPI 404.
+
+    Args:
+        conn: Open application database connection.
+        artist_id: Artist primary key.
+
+    Returns:
+        Matching artist row.
+
+    Raises:
+        HTTPException: If the artist does not exist.
+    """
     row = conn.execute("SELECT * FROM artists WHERE id = ?", (artist_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="artist not found")
@@ -27,6 +39,15 @@ def get_artist(conn: sqlite3.Connection, artist_id: int) -> sqlite3.Row:
 
 
 def create_or_update_artist(payload: ArtistCreate, now: Callable[[], str]) -> dict[str, Any]:
+    """Create an artist or update mutable metadata by name.
+
+    Args:
+        payload: Artist fields from the API request.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Artist response dictionary for the stored row.
+    """
     timestamp = now()
     update_links = "links" in payload.model_fields_set
     update_images = "images" in payload.model_fields_set
@@ -76,16 +97,44 @@ def create_or_update_artist(payload: ArtistCreate, now: Callable[[], str]) -> di
 
 
 def list_artists() -> list[dict[str, Any]]:
+    """List all artists ordered by display name.
+
+    Returns:
+        Artist response dictionaries.
+    """
     with connect() as conn:
         return [artist_response(row) for row in conn.execute("SELECT * FROM artists ORDER BY name")]
 
 
 def get_artist_response(artist_id: int) -> dict[str, Any]:
+    """Load one artist in API response format.
+
+    Args:
+        artist_id: Artist primary key.
+
+    Returns:
+        Artist response dictionary.
+
+    Raises:
+        HTTPException: If the artist does not exist.
+    """
     with connect() as conn:
         return artist_response(get_artist(conn, artist_id))
 
 
 def list_artist_tracks(artist_id: int, include_embedding: bool = False) -> list[dict[str, Any]]:
+    """List tracks for one artist.
+
+    Args:
+        artist_id: Artist primary key.
+        include_embedding: Whether to include latest vector values.
+
+    Returns:
+        Track response dictionaries ordered by track ID.
+
+    Raises:
+        HTTPException: If the artist does not exist.
+    """
     with connect() as conn:
         get_artist(conn, artist_id)
         rows = conn.execute(track_select_sql("tracks.artist_id = ?") + " ORDER BY tracks.id", (artist_id,)).fetchall()
@@ -93,6 +142,20 @@ def list_artist_tracks(artist_id: int, include_embedding: bool = False) -> list[
 
 
 def list_tracks(page: int = 1, page_size: int = 100, include_embedding: bool = False) -> dict[str, Any]:
+    """List tracks with pagination metadata.
+
+    Args:
+        page: One-based page number.
+        page_size: Number of tracks per page.
+        include_embedding: Whether to include latest vector values.
+
+    Returns:
+        Dictionary containing tracks, pagination inputs, total count, and
+        ``has_next``.
+
+    Raises:
+        HTTPException: If pagination values are invalid.
+    """
     if page < 1:
         raise HTTPException(status_code=400, detail="page must be greater than or equal to 1")
     if page_size < 1:
@@ -115,6 +178,18 @@ def list_tracks(page: int = 1, page_size: int = 100, include_embedding: bool = F
 
 
 def validate_artist_download_request(artist_id: int, payload: DownloadRequest) -> dict[str, Any]:
+    """Validate that an artist download request has a source of track URLs.
+
+    Args:
+        artist_id: Artist primary key.
+        payload: Download request from the API.
+
+    Returns:
+        Artist response dictionary.
+
+    Raises:
+        HTTPException: If the artist is missing or no URL source is available.
+    """
     artist = get_artist_response(artist_id)
     if payload.track_urls is None and not artist["soundcloud_url"]:
         raise HTTPException(status_code=400, detail="artist has no soundcloud_url and no track_urls were supplied")
@@ -122,6 +197,17 @@ def validate_artist_download_request(artist_id: int, payload: DownloadRequest) -
 
 
 def get_track_samples(track_id: int) -> list[dict[str, Any]]:
+    """List recorded audio chunks for a track.
+
+    Args:
+        track_id: Track primary key.
+
+    Returns:
+        Track sample rows ordered by chunk index.
+
+    Raises:
+        HTTPException: If the track does not exist.
+    """
     with connect() as conn:
         if conn.execute("SELECT id FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
             raise HTTPException(status_code=404, detail="track not found")
@@ -130,6 +216,18 @@ def get_track_samples(track_id: int) -> list[dict[str, Any]]:
 
 
 def list_track_embeddings(track_id: int, include_embedding: bool = False) -> list[dict[str, Any]]:
+    """List embedding rows stored for one track.
+
+    Args:
+        track_id: Track primary key.
+        include_embedding: Whether to include vector values from ChromaDB.
+
+    Returns:
+        Track embedding response dictionaries, newest first.
+
+    Raises:
+        HTTPException: If the track does not exist.
+    """
     with connect() as conn:
         if conn.execute("SELECT id FROM tracks WHERE id = ?", (track_id,)).fetchone() is None:
             raise HTTPException(status_code=404, detail="track not found")
@@ -141,6 +239,17 @@ def list_track_embeddings(track_id: int, include_embedding: bool = False) -> lis
 
 
 def get_track_embedding(track_id: int) -> dict[str, Any]:
+    """Load a track with its latest embedding vector.
+
+    Args:
+        track_id: Track primary key.
+
+    Returns:
+        Track response dictionary including the embedding.
+
+    Raises:
+        HTTPException: If the track or embedding does not exist.
+    """
     with connect() as conn:
         row = conn.execute(track_select_sql("tracks.id = ?"), (track_id,)).fetchone()
         if row is None:
@@ -151,6 +260,19 @@ def get_track_embedding(track_id: int) -> dict[str, Any]:
 
 
 def get_artist_embeddings(artist_id: int, include_tracks: bool = True) -> dict[str, Any]:
+    """Aggregate stored track embeddings for one artist.
+
+    Args:
+        artist_id: Artist primary key.
+        include_tracks: Whether to include individual track embedding rows.
+
+    Returns:
+        Artist metadata, track count, average embedding, and optionally track
+        embeddings.
+
+    Raises:
+        HTTPException: If the artist does not exist.
+    """
     with connect() as conn:
         artist = get_artist(conn, artist_id)
         rows = conn.execute(
@@ -189,6 +311,20 @@ def upsert_track(
     download_status: str | None,
     now: Callable[[], str],
 ) -> int:
+    """Insert or update a track row for an artist URL.
+
+    Args:
+        conn: Open application database connection.
+        artist_id: Owning artist primary key.
+        url: Source media URL.
+        path: Local cache path, if known.
+        downloaded: Whether the track has a cached audio file.
+        download_status: Explicit download status, or inferred when omitted.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Track primary key.
+    """
     timestamp = now()
     status = download_status or ("completed" if downloaded else "not_started")
     conn.execute(
@@ -215,6 +351,20 @@ def set_track_download_status(
     error: str | None,
     now: Callable[[], str],
 ) -> sqlite3.Row:
+    """Update download status fields for a track.
+
+    Args:
+        conn: Open application database connection.
+        track_id: Track primary key.
+        status: New status string.
+        downloaded: Optional downloaded flag; ``None`` preserves the current
+            value.
+        error: Last error message to store, or ``None`` to clear.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Updated track row.
+    """
     downloaded_sql = "downloaded" if downloaded is None else "?"
     params: list[Any] = [status]
     if downloaded is not None:
@@ -241,6 +391,21 @@ def record_samples(
     max_chunks: int,
     now: Callable[[], str],
 ) -> int:
+    """Preprocess a track and record its chunk metadata.
+
+    Args:
+        conn: Open application database connection.
+        track_id: Track primary key.
+        path: Local audio file path.
+        sampling_rate: Target sampling rate for preprocessing.
+        chunk_seconds: Duration of each chunk.
+        chunk_stride_seconds: Step between chunk starts.
+        max_chunks: Maximum chunks to record.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Number of recorded chunks.
+    """
     chunks = preprocess_track(
         path,
         sampling_rate=sampling_rate,
@@ -270,6 +435,17 @@ def record_samples(
 
 
 def select_embedding_rows(payload: ComputeRequest) -> list[dict[str, Any]]:
+    """Select tracks that should be embedded for a compute request.
+
+    Args:
+        payload: Embedding request with filtering and idempotency settings.
+
+    Returns:
+        Track rows with artist UUIDs, ready for worker processing.
+
+    Raises:
+        HTTPException: If ``payload.artist_id`` is supplied but missing.
+    """
     sampling_hash = config_hash(sampling_strategy(payload))
     model_hash = config_hash(embedding_model_config(payload))
     where = ["tracks.path IS NOT NULL"]
@@ -311,6 +487,17 @@ def select_embedding_rows(payload: ComputeRequest) -> list[dict[str, Any]]:
 
 
 def store_track_embedding(row: dict[str, Any], embedding: np.ndarray, payload: ComputeRequest, now: Callable[[], str]) -> sqlite3.Row:
+    """Store a track-level embedding in ChromaDB and SQLite metadata.
+
+    Args:
+        row: Track row selected by :func:`select_embedding_rows`.
+        embedding: Track-level embedding vector.
+        payload: Embedding request used to compute provenance hashes.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Updated track row.
+    """
     track_id = int(row["id"])
     artist_id = int(row["artist_id"])
     artist_uuid = str(row["artist_uuid"])
@@ -407,6 +594,20 @@ def store_sample_embeddings(
     payload: ComputeRequest,
     now: Callable[[], str],
 ) -> list[dict[str, Any]]:
+    """Store per-segment embeddings for a track.
+
+    Args:
+        row: Track row selected by :func:`select_embedding_rows`.
+        embeddings: Two-dimensional segment embedding array.
+        payload: Embedding request used to compute provenance hashes.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Stored sample embedding metadata rows.
+
+    Raises:
+        ValueError: If the embedding array shape does not match recorded chunks.
+    """
     track_id = int(row["id"])
     vectors = np.asarray(embeddings, dtype=np.float32)
     if vectors.ndim != 2:
@@ -503,17 +704,47 @@ def store_sample_embeddings(
 
 
 def store_track_error(track_id: int, error: str, now: Callable[[], str]) -> sqlite3.Row:
+    """Persist the latest embedding or processing error for a track.
+
+    Args:
+        track_id: Track primary key.
+        error: Error message to store.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Updated track row.
+    """
     with connect() as conn:
         conn.execute("UPDATE tracks SET last_error = ?, updated_at = ? WHERE id = ?", (error, now(), track_id))
         return conn.execute("SELECT * FROM tracks WHERE id = ?", (track_id,)).fetchone()
 
 
 def get_artist_dict(artist_id: int) -> dict[str, Any]:
+    """Load one artist as a response dictionary.
+
+    Args:
+        artist_id: Artist primary key.
+
+    Returns:
+        Artist response dictionary.
+    """
     with connect() as conn:
         return artist_response(get_artist(conn, artist_id))
 
 
 def prepare_track_download(artist_id: int, artist_name: str, track_url: str, cache_dir: str, now: Callable[[], str]) -> dict[str, Any]:
+    """Create or mark a track row before a download worker runs.
+
+    Args:
+        artist_id: Owning artist primary key.
+        artist_name: Artist name used for cache path derivation.
+        track_url: SoundCloud track URL.
+        cache_dir: Root audio cache directory.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Track response dictionary in ``downloading`` state.
+    """
     path = ArtistData(artist_name, [track_url], cache_folder=cache_dir).get_track_path_by_url(track_url)
     with connect() as conn:
         track_id = upsert_track(
@@ -529,6 +760,17 @@ def prepare_track_download(artist_id: int, artist_name: str, track_url: str, cac
 
 
 def complete_track_download(track_id: int, path: str | Path, payload: DownloadRequest, now: Callable[[], str]) -> sqlite3.Row:
+    """Mark a track download as complete and record sample metadata.
+
+    Args:
+        track_id: Track primary key.
+        path: Local audio file path.
+        payload: Download request containing sampling settings.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Updated track row.
+    """
     with connect() as conn:
         row = set_track_download_status(conn, track_id, "completed", downloaded=True, error=None, now=now)
         try:
@@ -548,6 +790,17 @@ def complete_track_download(track_id: int, path: str | Path, payload: DownloadRe
 
 
 def fail_track_download(track_id: int, path: str | Path, error: str, now: Callable[[], str]) -> sqlite3.Row:
+    """Mark a track download as failed unless the file exists anyway.
+
+    Args:
+        track_id: Track primary key.
+        path: Expected local audio file path.
+        error: Error message to store.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Updated track row.
+    """
     with connect() as conn:
         file_exists = Path(path).exists()
         status = "completed" if file_exists else "failed"
@@ -555,6 +808,14 @@ def fail_track_download(track_id: int, path: str | Path, error: str, now: Callab
 
 
 def similarity_where(payload: SimilaritySearchRequest) -> dict[str, Any] | None:
+    """Build a ChromaDB metadata filter for similarity search.
+
+    Args:
+        payload: Similarity request with optional metadata filters.
+
+    Returns:
+        ChromaDB ``where`` filter, or ``None`` when no filters are present.
+    """
     where: dict[str, Any] = {}
     if payload.artist_id is not None:
         where["artist_id"] = payload.artist_id
@@ -568,6 +829,14 @@ def similarity_where(payload: SimilaritySearchRequest) -> dict[str, Any] | None:
 
 
 def latest_vector_ids_for_tracks(track_ids: list[int]) -> list[str]:
+    """Load latest embedding vector IDs for track IDs.
+
+    Args:
+        track_ids: Track primary keys.
+
+    Returns:
+        Latest vector IDs ordered by track ID.
+    """
     if not track_ids:
         return []
     placeholders = ",".join("?" for _ in track_ids)
@@ -591,6 +860,14 @@ def latest_vector_ids_for_tracks(track_ids: list[int]) -> list[str]:
 
 
 def embedding_row_by_vector_id(vector_id: str) -> dict[str, Any] | None:
+    """Load embedding metadata and joined track/artist fields by vector ID.
+
+    Args:
+        vector_id: Stored ChromaDB vector ID.
+
+    Returns:
+        Metadata dictionary, or ``None`` when not found.
+    """
     with connect() as conn:
         row = conn.execute(
             """
@@ -606,6 +883,19 @@ def embedding_row_by_vector_id(vector_id: str) -> dict[str, Any] | None:
 
 
 def similarity_query_vector(payload: SimilaritySearchRequest) -> np.ndarray:
+    """Resolve a similarity request into one query vector.
+
+    Args:
+        payload: Similarity request containing a raw vector, vector IDs, or
+            track IDs.
+
+    Returns:
+        Query vector, averaging multiple referenced vectors when necessary.
+
+    Raises:
+        HTTPException: If no query source is supplied or referenced vectors are
+            missing.
+    """
     vector_store = get_vector_store()
     if payload.embedding is not None:
         return np.asarray(payload.embedding, dtype=np.float32)
@@ -622,6 +912,14 @@ def similarity_query_vector(payload: SimilaritySearchRequest) -> np.ndarray:
 
 
 def latest_similarity_rows(payload: SimilaritySearchRequest) -> list[dict[str, Any]]:
+    """Load latest embedding rows that match similarity filters.
+
+    Args:
+        payload: Similarity request with optional metadata filters.
+
+    Returns:
+        Joined embedding rows for distance search.
+    """
     clauses = [
         "te.id = (SELECT id FROM track_embeddings latest WHERE latest.track_id = te.track_id ORDER BY latest.embedded_at DESC, latest.id DESC LIMIT 1)"
     ]
@@ -653,6 +951,14 @@ def latest_similarity_rows(payload: SimilaritySearchRequest) -> list[dict[str, A
 
 
 def euclidean_similarity_search(payload: SimilaritySearchRequest) -> list[dict[str, Any]]:
+    """Run Euclidean similarity search against latest stored embeddings.
+
+    Args:
+        payload: Similarity request with query source and filters.
+
+    Returns:
+        Ranked results with distance and ``1 / (1 + distance)`` similarity.
+    """
     vector_store = get_vector_store()
     query = similarity_query_vector(payload)
     results = []
@@ -674,6 +980,19 @@ def euclidean_similarity_search(payload: SimilaritySearchRequest) -> list[dict[s
 
 
 def similarity_search(payload: SimilaritySearchRequest) -> list[dict[str, Any]]:
+    """Run similarity search using the requested metric.
+
+    Args:
+        payload: Similarity request with query source, filters, metric, and
+            result limit.
+
+    Returns:
+        Ranked results with vector-store result data and joined embedding rows.
+
+    Raises:
+        HTTPException: If no query source is supplied or referenced vectors are
+            missing.
+    """
     if payload.metric == "euclidean":
         return euclidean_similarity_search(payload)
     vector_store = get_vector_store()

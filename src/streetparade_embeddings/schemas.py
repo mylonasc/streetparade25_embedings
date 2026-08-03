@@ -12,6 +12,8 @@ from .soundcloud import DiscoveryMethod
 
 
 class ArtistCreate(BaseModel):
+    """Request body for creating or updating an artist."""
+
     name: str = _Field(min_length=1)
     links: list[str] = _Field(default_factory=list)
     images: list[str] = _Field(default_factory=list)
@@ -25,6 +27,8 @@ class ArtistCreate(BaseModel):
 
 
 class DownloadRequest(BaseModel):
+    """Request body for discovering, downloading, and sampling artist tracks."""
+
     max_tracks: int = _Field(default=5, ge=1)
     track_urls: list[str] | None = None
     discovery_method: DiscoveryMethod = DiscoveryMethod.YT_DLP
@@ -36,6 +40,8 @@ class DownloadRequest(BaseModel):
 
 
 class ComputeRequest(BaseModel):
+    """Request body for queued CLAP embedding computation."""
+
     artist_id: int | None = None
     only_missing: bool = True
     embedding_backend: str = "clap"
@@ -52,6 +58,8 @@ class ComputeRequest(BaseModel):
 
 
 class SimilaritySearchRequest(BaseModel):
+    """Request body for track-embedding similarity search."""
+
     embedding: list[float] | None = None
     vector_ids: list[str] | None = None
     track_ids: list[int] | None = None
@@ -68,6 +76,8 @@ LayoutInput = Literal["raw", "pca"]
 
 
 class LayoutRequest(BaseModel):
+    """Request body for recomputing visualization coordinates and clusters."""
+
     username: str | None = None
     pca_enabled: bool = False
     pca_components: int = _Field(default=10, ge=1)
@@ -84,6 +94,8 @@ PreferenceValue = Literal["up", "down", "clear"]
 
 
 class PreferenceRequest(BaseModel):
+    """Request body for setting a user's visualization preference."""
+
     point_id: str = _Field(min_length=1)
     target_kind: Literal["track", "user_track", "artist"]
     target_id: str = _Field(min_length=1)
@@ -95,6 +107,8 @@ class PreferenceRequest(BaseModel):
 
 @dataclass
 class EmbeddingJob:
+    """In-memory status record for a queued embedding computation job."""
+
     id: str
     request: ComputeRequest
     status: str = "queued"
@@ -107,6 +121,11 @@ class EmbeddingJob:
     finished_at: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """Serialize the job for API responses.
+
+        Returns:
+            JSON-compatible job status dictionary.
+        """
         return {
             "id": self.id,
             "status": self.status,
@@ -124,6 +143,8 @@ class EmbeddingJob:
 
 @dataclass
 class DownloadJob:
+    """In-memory status record for a queued artist download job."""
+
     id: str
     artist_id: int
     request: DownloadRequest
@@ -138,6 +159,11 @@ class DownloadJob:
     finished_at: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """Serialize the job for API responses.
+
+        Returns:
+            JSON-compatible job status dictionary.
+        """
         return {
             "id": self.id,
             "artist_id": self.artist_id,
@@ -163,5 +189,10 @@ _default_now: Callable[[], str] = _utc_now
 
 
 def set_job_clock(clock: Callable[[], str]) -> None:
+    """Override the clock used for new job timestamps.
+
+    Args:
+        clock: Callable returning an ISO timestamp string.
+    """
     global _default_now
     _default_now = clock

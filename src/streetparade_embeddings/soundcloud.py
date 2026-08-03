@@ -11,11 +11,24 @@ from .models import Artist, TrackDownload
 
 
 class DiscoveryMethod(str, Enum):
+    """SoundCloud artist-page track discovery backends."""
+
     REQUESTS_HTML = "requests-html"
     YT_DLP = "yt-dlp"
 
     @classmethod
     def from_value(cls, value: "DiscoveryMethod | str") -> "DiscoveryMethod":
+        """Normalize a string or enum value to a discovery method.
+
+        Args:
+            value: Existing enum value or backend string.
+
+        Returns:
+            The matching discovery method enum.
+
+        Raises:
+            ValueError: If ``value`` is not supported.
+        """
         if isinstance(value, cls):
             return value
         try:
@@ -26,19 +39,32 @@ class DiscoveryMethod(str, Enum):
 
 
 def stable_hash(value: str) -> str:
+    """Return a deterministic hash used for cache directory names."""
     return hashlib.md5(value.encode("utf-8")).hexdigest()
 
 
 def artist_cache_dir(cache_dir: str | Path, artist: str) -> Path:
+    """Build the deterministic cache directory for an artist."""
     return Path(cache_dir) / stable_hash(artist)
 
 
 def track_cache_path(cache_dir: str | Path, artist: str, track_url: str) -> Path:
+    """Build the deterministic MP3 cache path for a SoundCloud track."""
     return artist_cache_dir(cache_dir, artist) / f"{stable_hash(track_url)}.mp3"
 
 
 def parse_artists_from_html(html_file: str | Path) -> list[Artist]:
-    """Parse Street Parade artist data from a saved HTML file."""
+    """Parse Street Parade artist data from a saved HTML file.
+
+    Args:
+        html_file: Path to a saved Street Parade artist listing page.
+
+    Returns:
+        Artists with discovered links, images, and SoundCloud URL when present.
+
+    Raises:
+        RuntimeError: If BeautifulSoup is not installed.
+    """
 
     try:
         from bs4 import BeautifulSoup
@@ -81,6 +107,14 @@ class SoundCloudTrackDiscoverer:
         self.timeout = timeout
 
     def discover(self, soundcloud_url: str) -> list[str]:
+        """Discover track URLs synchronously for a SoundCloud page.
+
+        Args:
+            soundcloud_url: SoundCloud artist/profile URL.
+
+        Returns:
+            Discovered track URLs.
+        """
         if self.method is DiscoveryMethod.YT_DLP:
             return discover_track_urls_ytdlp(soundcloud_url)
         return asyncio.run(
@@ -92,6 +126,14 @@ class SoundCloudTrackDiscoverer:
         )
 
     async def discover_async(self, soundcloud_url: str) -> list[str]:
+        """Discover track URLs asynchronously for a SoundCloud page.
+
+        Args:
+            soundcloud_url: SoundCloud artist/profile URL.
+
+        Returns:
+            Discovered track URLs.
+        """
         if self.method is DiscoveryMethod.YT_DLP:
             return discover_track_urls_ytdlp(soundcloud_url)
         return await discover_track_urls_requests_html(
@@ -160,6 +202,17 @@ def discover_track_urls_sync(
     timeout: int = 40,
     method: DiscoveryMethod | str = DiscoveryMethod.REQUESTS_HTML,
 ) -> list[str]:
+    """Discover SoundCloud track URLs using the selected backend.
+
+    Args:
+        soundcloud_url: SoundCloud artist/profile URL.
+        sleep_seconds: Render wait for the requests-html backend.
+        timeout: Render timeout for the requests-html backend.
+        method: Discovery backend to use.
+
+    Returns:
+        Discovered track URLs.
+    """
     discoverer = SoundCloudTrackDiscoverer(method=method, sleep_seconds=sleep_seconds, timeout=timeout)
     return discoverer.discover(soundcloud_url)
 
@@ -172,11 +225,25 @@ def _entry_track_url(entry: dict) -> str | None:
 
 
 def load_artist_links(path: str | Path) -> dict[str, list[str]]:
+    """Load an artist-to-track-URLs mapping from JSON.
+
+    Args:
+        path: JSON file path.
+
+    Returns:
+        Mapping of artist names to SoundCloud track URLs.
+    """
     with Path(path).open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def save_artist_links(artist_links: dict[str, list[str]], path: str | Path) -> None:
+    """Save an artist-to-track-URLs mapping as pretty JSON.
+
+    Args:
+        artist_links: Mapping of artist names to track URLs.
+        path: Output JSON file path.
+    """
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as handle:
@@ -184,7 +251,18 @@ def save_artist_links(artist_links: dict[str, list[str]], path: str | Path) -> N
 
 
 def download_track(track_url: str, output_path: str | Path) -> TrackDownload:
-    """Download one SoundCloud track to output_path."""
+    """Download one SoundCloud track to an explicit output path.
+
+    Args:
+        track_url: SoundCloud track URL.
+        output_path: Destination MP3 path.
+
+    Returns:
+        Download result indicating whether a new file was written.
+
+    Raises:
+        RuntimeError: If neither SoundCloud/yt-dlp dependencies are available.
+    """
 
     try:
         from sclib import SoundcloudAPI, Track
@@ -210,7 +288,17 @@ def download_track(track_url: str, output_path: str | Path) -> TrackDownload:
 
 
 def download_track_to_cache(track_url: str, cache_dir: str | Path, artist: str | None = None) -> TrackDownload:
-    """Download a SoundCloud track into the artist cache, inferring artist when needed."""
+    """Download a SoundCloud track into the deterministic artist cache.
+
+    Args:
+        track_url: SoundCloud track URL.
+        cache_dir: Root audio cache directory.
+        artist: Optional artist cache bucket; inferred from track metadata when
+            omitted.
+
+    Returns:
+        Download result with cache path and whether a new file was downloaded.
+    """
 
     try:
         return _download_to_cache_with_ytdlp(track_url, cache_dir, artist=artist)
@@ -302,6 +390,14 @@ class ArtistData:
         self.artist_storage_dir.mkdir(parents=True, exist_ok=True)
 
     def download_links(self, num_links: int = 2) -> list[TrackDownload]:
+        """Download the first configured artist links.
+
+        Args:
+            num_links: Maximum number of links to download.
+
+        Returns:
+            Download results for attempted links.
+        """
         results = []
         for track_url in self.links[:num_links]:
             path = self.get_track_path_by_url(track_url)
@@ -315,12 +411,15 @@ class ArtistData:
         return self.download_links(num_links=num_links)
 
     def has_mp3(self) -> bool:
+        """Return whether the first configured track is present in the cache."""
         return bool(self.links) and self.get_track_path(0).exists()
 
     def get_track_path_by_url(self, track_url: str) -> Path:
+        """Return the deterministic cache path for a track URL."""
         return track_cache_path(self.cache_folder, self.artist, track_url)
 
     def get_track_path(self, idx: int) -> Path:
+        """Return the deterministic cache path for a track by index."""
         return self.get_track_path_by_url(self.links[idx])
 
     def __len__(self) -> int:

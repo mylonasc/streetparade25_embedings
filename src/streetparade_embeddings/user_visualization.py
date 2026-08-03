@@ -34,6 +34,8 @@ USER_ARTIST_PREFIX = "User Added"
 
 @dataclass
 class UserTrackJob:
+    """Persistable status for analyzing a user-submitted track."""
+
     id: str
     user_track_id: int
     status: str = "queued"
@@ -44,11 +46,14 @@ class UserTrackJob:
     finished_at: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """Serialize the job for API responses."""
         return self.__dict__.copy()
 
 
 @dataclass
 class LayoutJob:
+    """Persistable status for a visualization layout recomputation job."""
+
     id: str
     username: str | None
     request: LayoutRequest = field(default_factory=LayoutRequest)
@@ -59,6 +64,7 @@ class LayoutJob:
     finished_at: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """Serialize the job for API responses."""
         data = self.__dict__.copy()
         data["request"] = self.request.model_dump(mode="json")
         return data
@@ -69,6 +75,17 @@ def _now() -> str:
 
 
 def normalize_username(username: str) -> str:
+    """Normalize and validate a public visualization username.
+
+    Args:
+        username: User-supplied username.
+
+    Returns:
+        Lowercase normalized username.
+
+    Raises:
+        HTTPException: If the username does not match the allowed format.
+    """
     value = username.strip().lower()
     if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{1,62}", value):
         raise HTTPException(status_code=400, detail="username must be 2-63 chars: letters, numbers, _, ., -")
@@ -76,6 +93,17 @@ def normalize_username(username: str) -> str:
 
 
 def source_type(url: str) -> str:
+    """Classify a submitted URL as SoundCloud or YouTube.
+
+    Args:
+        url: User-submitted media URL.
+
+    Returns:
+        Source type string stored with the user track.
+
+    Raises:
+        HTTPException: If the URL host is unsupported.
+    """
     host = urlparse(url).netloc.lower()
     if "soundcloud.com" in host:
         return "soundcloud"
@@ -85,6 +113,15 @@ def source_type(url: str) -> str:
 
 
 def get_or_create_user(username: str, now: Callable[[], str] = _now) -> dict[str, Any]:
+    """Create or refresh a visualization user.
+
+    Args:
+        username: Public username.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Stored user row as a dictionary.
+    """
     init_db()
     username = normalize_username(username)
     timestamp = now()
@@ -101,6 +138,17 @@ def get_or_create_user(username: str, now: Callable[[], str] = _now) -> dict[str
 
 
 def get_user(username: str) -> dict[str, Any]:
+    """Load a visualization user by username.
+
+    Args:
+        username: Public username.
+
+    Returns:
+        Stored user row as a dictionary.
+
+    Raises:
+        HTTPException: If the user does not exist.
+    """
     init_db()
     username = normalize_username(username)
     with connect() as conn:
@@ -111,6 +159,16 @@ def get_user(username: str) -> dict[str, Any]:
 
 
 def create_user_track(username: str, url: str, now: Callable[[], str] = _now) -> dict[str, Any]:
+    """Create or refresh a user-submitted track row.
+
+    Args:
+        username: Public username that owns the track.
+        url: SoundCloud or YouTube URL.
+        now: Clock function used for timestamps.
+
+    Returns:
+        User-track response dictionary.
+    """
     user = get_or_create_user(username, now)
     url = url.strip()
     kind = source_type(url)
@@ -137,6 +195,14 @@ def create_user_track(username: str, url: str, now: Callable[[], str] = _now) ->
 
 
 def list_user_tracks(username: str) -> list[dict[str, Any]]:
+    """List tracks submitted by a user.
+
+    Args:
+        username: Public username.
+
+    Returns:
+        User-track response dictionaries ordered newest first.
+    """
     user = get_user(username)
     with connect() as conn:
         rows = conn.execute(
@@ -153,6 +219,14 @@ def list_user_tracks(username: str) -> list[dict[str, Any]]:
 
 
 def set_user_track_status(user_track_id: int, status: str, phase: str | None = None, error: str | None = None) -> None:
+    """Update status fields for a user-submitted track.
+
+    Args:
+        user_track_id: User track primary key.
+        status: New status string.
+        phase: Optional phase label; currently accepted for API symmetry.
+        error: Last error message to store, or ``None`` to clear.
+    """
     with connect() as conn:
         conn.execute(
             "UPDATE user_tracks SET status = ?, last_error = ?, updated_at = ? WHERE id = ?",
@@ -170,6 +244,18 @@ def update_user_track_after_embedding(
     y: float | None,
     placement_method: str,
 ) -> None:
+    """Mark a user track complete after embedding and placement.
+
+    Args:
+        user_track_id: User track primary key.
+        title: Display title inferred from media metadata.
+        artist: Display artist inferred from media metadata.
+        track_id: Canonical track row linked to the user submission.
+        vector_id: Latest stored embedding vector ID.
+        x: Initial map x-coordinate.
+        y: Initial map y-coordinate.
+        placement_method: Method used to derive initial coordinates.
+    """
     with connect() as conn:
         conn.execute(
             """
@@ -183,6 +269,17 @@ def update_user_track_after_embedding(
 
 
 def get_user_track(user_track_id: int) -> dict[str, Any]:
+    """Load a user-submitted track by primary key.
+
+    Args:
+        user_track_id: User track primary key.
+
+    Returns:
+        User-track response dictionary.
+
+    Raises:
+        HTTPException: If the row does not exist.
+    """
     with connect() as conn:
         row = conn.execute(
             """
@@ -199,6 +296,18 @@ def get_user_track(user_track_id: int) -> dict[str, Any]:
 
 
 def get_user_track_for_username(username: str, user_track_id: int) -> dict[str, Any]:
+    """Load a user-submitted track scoped to its owner.
+
+    Args:
+        username: Public username that must own the track.
+        user_track_id: User track primary key.
+
+    Returns:
+        User-track response dictionary with joined audio path.
+
+    Raises:
+        HTTPException: If the user or track does not exist.
+    """
     user = get_user(username)
     with connect() as conn:
         row = conn.execute(
@@ -217,6 +326,7 @@ def get_user_track_for_username(username: str, user_track_id: int) -> dict[str, 
 
 
 def record_user_track_job(job: UserTrackJob) -> None:
+    """Persist the current status of a user-track analysis job."""
     with connect() as conn:
         conn.execute(
             """
@@ -228,12 +338,14 @@ def record_user_track_job(job: UserTrackJob) -> None:
 
 
 def load_user_track_job(job_id: str) -> dict[str, Any] | None:
+    """Load a persisted user-track analysis job by ID."""
     with connect() as conn:
         row = conn.execute("SELECT * FROM user_track_jobs WHERE id = ?", (job_id,)).fetchone()
     return row_dict(row) if row else None
 
 
 def user_track_response(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    """Normalize a user-track row for API responses."""
     data = row_dict(row)
     if data.get("x") is not None:
         data["x"] = float(data["x"])
@@ -243,10 +355,21 @@ def user_track_response(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
 
 
 def row_dict(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    """Convert a SQLite row or mapping to a plain dictionary."""
     return dict(row)
 
 
 def analyze_user_track(user_track_id: int, model: ClapEmbeddingModel, request: ComputeRequest) -> dict[str, Any]:
+    """Download, embed, store, and place a user-submitted track.
+
+    Args:
+        user_track_id: User track primary key.
+        model: Loaded embedding model.
+        request: Embedding request controlling preprocessing and model settings.
+
+    Returns:
+        Updated user-track response dictionary.
+    """
     user_track = get_user_track(user_track_id)
     set_user_track_status(user_track_id, "running")
     url = user_track["source_url"]
@@ -301,6 +424,11 @@ def analyze_user_track(user_track_id: int, model: ClapEmbeddingModel, request: C
 
 
 def latest_vector_id_for_track(track_id: int) -> str:
+    """Return the most recent vector ID stored for a track.
+
+    Raises:
+        RuntimeError: If the track has no stored embedding row.
+    """
     with connect() as conn:
         row = conn.execute(
             """
@@ -317,6 +445,7 @@ def latest_vector_id_for_track(track_id: int) -> str:
 
 
 def latest_layout_points(username: str | None = None) -> list[dict[str, Any]] | None:
+    """Load the newest completed persisted layout for a user scope."""
     with connect() as conn:
         row = conn.execute(
             """
@@ -333,6 +462,7 @@ def latest_layout_points(username: str | None = None) -> list[dict[str, Any]] | 
 
 
 def visualization_points(username: str | None = None) -> list[dict[str, Any]]:
+    """Build visualization points from cached layout or live embeddings."""
     points = latest_layout_points(username)
     if points is None:
         points = base_embedding_points()
@@ -342,6 +472,7 @@ def visualization_points(username: str | None = None) -> list[dict[str, Any]]:
 
 
 def base_embedding_points(request: LayoutRequest | None = None) -> list[dict[str, Any]]:
+    """Project base catalog track embeddings into visualization points."""
     rows = latest_embedding_rows(include_user_artists=False)
     pairs = rows_with_vectors(rows)
     if not pairs:
@@ -354,6 +485,7 @@ def base_embedding_points(request: LayoutRequest | None = None) -> list[dict[str
 
 
 def add_artist_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Add synthetic artist centroid points to track visualization points."""
     without_old_artists = [point for point in points if point.get("kind") != "artist"]
     grouped: dict[str, list[dict[str, Any]]] = {}
     for point in without_old_artists:
@@ -395,6 +527,7 @@ def add_artist_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def merge_current_user_points(points: list[dict[str, Any]], username: str) -> list[dict[str, Any]]:
+    """Merge a user's completed submissions into an existing layout."""
     current = {f"user-track-{track['id']}": track for track in list_user_tracks(username) if track.get("status") == "completed"}
     merged = []
     seen = set()
@@ -421,6 +554,7 @@ def merge_current_user_points(points: list[dict[str, Any]], username: str) -> li
 
 
 def user_points(username: str) -> list[dict[str, Any]]:
+    """Return visualization points for a user's completed submissions."""
     return [
         user_point_from_track(track)
         for track in list_user_tracks(username)
@@ -429,6 +563,15 @@ def user_points(username: str) -> list[dict[str, Any]]:
 
 
 def recompute_layout(username: str | None = None, request: LayoutRequest | None = None) -> list[dict[str, Any]]:
+    """Recompute 2D coordinates and clusters for the visualization.
+
+    Args:
+        username: Optional user scope whose completed tracks should be included.
+        request: Layout options controlling PCA, t-SNE, clustering, and seed.
+
+    Returns:
+        Visualization point dictionaries for tracks and user tracks.
+    """
     username = normalize_username(username) if username else None
     rows = latest_embedding_rows(include_user_artists=username is not None)
     if username:
@@ -452,6 +595,7 @@ def recompute_layout(username: str | None = None, request: LayoutRequest | None 
 
 
 def save_layout_job(job: LayoutJob, points: list[dict[str, Any]] | None = None) -> None:
+    """Persist layout job status and optional completed points."""
     with connect() as conn:
         conn.execute(
             """
@@ -472,12 +616,14 @@ def save_layout_job(job: LayoutJob, points: list[dict[str, Any]] | None = None) 
 
 
 def load_layout_job(job_id: str) -> dict[str, Any] | None:
+    """Load a persisted layout job by ID."""
     with connect() as conn:
         row = conn.execute("SELECT id, username, status, error, created_at, started_at, finished_at FROM embedding_layouts WHERE id = ?", (job_id,)).fetchone()
     return row_dict(row) if row else None
 
 
 def latest_embedding_rows(include_user_artists: bool) -> list[dict[str, Any]]:
+    """Load latest embedding rows, optionally including user-submitted artists."""
     data = fetch_latest_embedding_rows()
     base_rows = [row for row in data if not is_user_artist(row["artist_name"])]
     seed_rows = seed_embedding_rows() if not base_rows else []
@@ -489,6 +635,15 @@ def latest_embedding_rows(include_user_artists: bool) -> list[dict[str, Any]]:
 
 
 def fetch_latest_embedding_rows(db_file: Path | None = None) -> list[dict[str, Any]]:
+    """Fetch the latest embedding row for each track from SQLite.
+
+    Args:
+        db_file: Optional SQLite database path; defaults to the configured app
+            database.
+
+    Returns:
+        Joined embedding rows with track and artist fields.
+    """
     if db_file is None:
         conn_context = connect()
     else:
@@ -519,6 +674,7 @@ def fetch_latest_embedding_rows(db_file: Path | None = None) -> list[dict[str, A
 
 
 def seed_embedding_rows() -> list[dict[str, Any]]:
+    """Load fallback base embeddings from ``STREETPARADE_SEED_DB`` if set."""
     raw = os.environ.get("STREETPARADE_SEED_DB")
     if not raw:
         return []
@@ -532,18 +688,22 @@ def seed_embedding_rows() -> list[dict[str, Any]]:
 
 
 def is_user_artist(artist_name: str | None) -> bool:
+    """Return whether an artist row represents user-submitted tracks."""
     return bool(artist_name and artist_name.startswith(f"{USER_ARTIST_PREFIX}:"))
 
 
 def user_track_ids(username: str) -> set[int]:
+    """Return canonical track IDs linked to a user's submissions."""
     return {int(track["track_id"]) for track in list_user_tracks(username) if track.get("track_id") is not None}
 
 
 def user_tracks_by_track_id(username: str) -> dict[int, dict[str, Any]]:
+    """Index a user's submissions by linked canonical track ID."""
     return {int(track["track_id"]): track for track in list_user_tracks(username) if track.get("track_id") is not None}
 
 
 def vectors_for_rows(rows: list[dict[str, Any]]) -> dict[str, np.ndarray]:
+    """Load ChromaDB vectors for embedding rows by vector ID."""
     store = get_vector_store()
     vectors = {}
     for row in rows:
@@ -554,11 +714,13 @@ def vectors_for_rows(rows: list[dict[str, Any]]) -> dict[str, np.ndarray]:
 
 
 def rows_with_vectors(rows: list[dict[str, Any]]) -> list[tuple[dict[str, Any], np.ndarray]]:
+    """Pair embedding rows with available vectors, dropping missing vectors."""
     vectors = vectors_for_rows(rows)
     return [(row, vectors[row["vector_id"]]) for row in rows if row["vector_id"] in vectors]
 
 
 def approximate_user_coordinates(embedding: np.ndarray) -> tuple[float | None, float | None]:
+    """Estimate map coordinates from nearest base embedding points."""
     layout = latest_layout_points(None)
     if not layout:
         layout = base_embedding_points()
@@ -575,6 +737,15 @@ def approximate_user_coordinates(embedding: np.ndarray) -> tuple[float | None, f
 
 
 def project_and_cluster(vectors: list[np.ndarray], request: LayoutRequest | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Project high-dimensional vectors to 2D and assign clusters.
+
+    Args:
+        vectors: Embedding vectors to lay out.
+        request: Optional layout controls for PCA, t-SNE, clustering, and seed.
+
+    Returns:
+        Tuple of ``(projection, clusters)`` arrays aligned with ``vectors``.
+    """
     if len(vectors) == 1:
         return np.zeros((1, 2), dtype=np.float32), np.zeros(1, dtype=int)
     x = np.vstack(vectors)
@@ -606,6 +777,7 @@ def project_and_cluster(vectors: list[np.ndarray], request: LayoutRequest | None
 
 
 def track_point(row: dict[str, Any], x: float, y: float, cluster: int) -> dict[str, Any]:
+    """Convert an embedding row into a visualization point."""
     title = title_from_url(row.get("url")) or f"Track {row['track_id']}"
     return {
         "id": f"track-{row['track_id']}",
@@ -633,6 +805,7 @@ def user_point_from_track(
     cluster: int = -1,
     placement_method: str | None = None,
 ) -> dict[str, Any]:
+    """Convert a user-track row into a visualization point."""
     method = placement_method or track.get("placement_method")
     return {
         "id": f"user-track-{track['id']}",
@@ -646,10 +819,12 @@ def user_point_from_track(
 
 
 def slugify(value: str) -> str:
+    """Create a URL-safe-ish identifier component for an artist label."""
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "artist"
 
 
 def title_from_url(url: str | None) -> str:
+    """Infer a display title from the final path segment of a URL."""
     if not url:
         return "Untitled"
     slug = unquote(urlparse(url).path.strip("/").split("/")[-1])
@@ -658,6 +833,7 @@ def title_from_url(url: str | None) -> str:
 
 
 def create_share(username: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Persist a shareable visualization payload for a user."""
     username = normalize_username(username)
     get_user(username)
     token = uuid4().hex
@@ -671,6 +847,11 @@ def create_share(username: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_share(token: str) -> dict[str, Any]:
+    """Load a saved visualization share by token.
+
+    Raises:
+        HTTPException: If the token does not exist.
+    """
     with connect() as conn:
         row = conn.execute("SELECT * FROM preference_shares WHERE token = ?", (token,)).fetchone()
     if row is None:

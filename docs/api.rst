@@ -37,6 +37,8 @@ Visualizer endpoints include:
 * ``GET /users/{username}``
 * ``POST /users/{username}/tracks``
 * ``GET /users/{username}/tracks``
+* ``GET /users/{username}/preferences``
+* ``POST /users/{username}/preferences``
 * ``GET /users/{username}/tracks/{user_track_id}/audio``
 * ``GET /user-track-jobs/{job_id}``
 * ``GET /visualization``
@@ -46,6 +48,37 @@ Visualizer endpoints include:
 * ``GET /shares/{token}``
 
 ``POST /similarity/track-embeddings`` accepts cosine and euclidean metrics. ``POST /layouts/recompute`` accepts optional PCA, t-SNE, spectral clustering, and random-seed controls through :class:`streetparade_embeddings.schemas.LayoutRequest`.
+
+FastAPI Application
+-------------------
+
+.. automodule:: streetparade_embeddings.api
+   :members:
+   :undoc-members:
+
+.. automodule:: streetparade_embeddings.app_factory
+   :members:
+   :undoc-members:
+
+.. automodule:: streetparade_embeddings.routes.catalog
+   :members:
+   :undoc-members:
+
+.. automodule:: streetparade_embeddings.routes.jobs
+   :members:
+   :undoc-members:
+
+.. automodule:: streetparade_embeddings.routes.users
+   :members:
+   :undoc-members:
+
+.. automodule:: streetparade_embeddings.jobs
+   :members:
+   :undoc-members:
+
+.. automodule:: streetparade_embeddings.runtime
+   :members:
+   :undoc-members:
 
 Configuration
 -------------
@@ -88,6 +121,20 @@ Repository Helpers
 ------------------
 
 .. automodule:: streetparade_embeddings.repositories
+   :members:
+   :undoc-members:
+
+Preference Helpers
+------------------
+
+.. automodule:: streetparade_embeddings.preferences
+   :members:
+   :undoc-members:
+
+User Visualization Helpers
+--------------------------
+
+.. automodule:: streetparade_embeddings.user_visualization
    :members:
    :undoc-members:
 
@@ -139,5 +186,30 @@ Pipeline Orchestration
 ----------------------
 
 .. automodule:: streetparade_embeddings.pipeline
+   :members:
+   :undoc-members:
+
+Annotation Backend
+------------------
+
+The annotation backend in ``ml_pipeline/1_labeling/backend/app`` uses the same SQLite track and sample tables as the main backend, and adds campaign, label-set, label, item, and assignment tables for supervised labeling workflows.
+
+.. automodule:: app.main
+   :members:
+   :undoc-members:
+
+.. automodule:: app.schemas
+   :members:
+   :undoc-members:
+
+.. automodule:: app.annotation_repositories
+   :members:
+   :undoc-members:
+
+.. automodule:: app.db
+   :members:
+   :undoc-members:
+
+.. automodule:: app.config
    :members:
    :undoc-members:

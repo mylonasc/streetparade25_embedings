@@ -12,11 +12,24 @@ AudioEmbedding: TypeAlias = NDArray[np.floating]
 
 
 class MediaSource(str, Enum):
+    """External media platforms supported by the downloader."""
+
     SOUNDCLOUD = "soundcloud"
     YOUTUBE = "youtube"
 
     @classmethod
     def from_value(cls, value: "MediaSource | str") -> "MediaSource":
+        """Normalize a string or enum value to a :class:`MediaSource`.
+
+        Args:
+            value: Existing enum value or source string.
+
+        Returns:
+            The matching media source enum.
+
+        Raises:
+            ValueError: If ``value`` is not a supported media source.
+        """
         if isinstance(value, cls):
             return value
         try:
@@ -28,6 +41,8 @@ class MediaSource(str, Enum):
 
 @dataclass(frozen=True)
 class Artist:
+    """Artist metadata parsed from Street Parade data sources."""
+
     name: str
     links: list[str]
     images: list[str]
@@ -39,6 +54,8 @@ class Artist:
 
 @dataclass(frozen=True)
 class TrackDownload:
+    """Result of downloading or resolving a SoundCloud track cache file."""
+
     artist: str
     url: str
     path: Path
@@ -50,6 +67,8 @@ class TrackDownload:
 
 @dataclass(frozen=True)
 class MediaDownload:
+    """Result of downloading or resolving a media item from any source."""
+
     source: MediaSource
     artist: str
     title: str
@@ -64,6 +83,8 @@ class MediaDownload:
 
 @dataclass(frozen=True)
 class ArtistEmbeddingResult:
+    """Computed embedding and processing metadata for one artist."""
+
     artist: str
     embedding: AudioEmbedding | None
     track_paths: list[Path]

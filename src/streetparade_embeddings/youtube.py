@@ -6,11 +6,35 @@ from .soundcloud import stable_hash
 
 
 def youtube_cache_path(cache_dir: str | Path, artist: str, video_url: str) -> Path:
+    """Build the deterministic cache path for a YouTube download.
+
+    Args:
+        cache_dir: Root audio cache directory.
+        artist: Artist or channel name used for cache bucketing.
+        video_url: YouTube video URL.
+
+    Returns:
+        Path where the MP3 should be stored.
+    """
     return Path(cache_dir) / "youtube" / stable_hash(artist) / f"{stable_hash(video_url)}.mp3"
 
 
 def download_youtube_to_cache(video_url: str, cache_dir: str | Path, artist: str | None = None) -> MediaDownload:
-    """Download a YouTube video as MP3, inferring artist/channel metadata when needed."""
+    """Download a YouTube video as MP3 into the deterministic cache.
+
+    Args:
+        video_url: YouTube video URL.
+        cache_dir: Root audio cache directory.
+        artist: Optional artist/channel cache bucket; inferred from yt-dlp
+            metadata when omitted.
+
+    Returns:
+        Download result with inferred title, artist, cache path, and whether a
+        new file was downloaded.
+
+    Raises:
+        RuntimeError: If ``yt-dlp`` is not installed.
+    """
 
     info = _extract_ytdlp_info(video_url)
     inferred_artist = artist or _artist_from_ytdlp_info(info) or "youtube"
@@ -61,4 +85,3 @@ def _download_with_ytdlp(video_url: str, output_path: str | Path) -> None:
     }
     with YoutubeDL(ydl_opts) as ydl:
         ydl.extract_info(video_url, download=True)
-

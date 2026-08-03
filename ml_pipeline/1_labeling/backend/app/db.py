@@ -10,10 +10,19 @@ _configured_db_path: Path | None = None
 
 
 def get_database_path() -> Path:
+    """Return the active annotation database path."""
     return _configured_db_path or default_db_path()
 
 
 def set_database_path(path: str | Path) -> Path:
+    """Configure and initialize the annotation database path.
+
+    Args:
+        path: SQLite database path selected by the API client.
+
+    Returns:
+        Resolved path stored for future connections.
+    """
     global _configured_db_path
     resolved = Path(path).expanduser()
     _configured_db_path = resolved
@@ -22,6 +31,12 @@ def set_database_path(path: str | Path) -> Path:
 
 
 def connect() -> sqlite3.Connection:
+    """Open a configured SQLite connection for annotation data.
+
+    Returns:
+        SQLite connection with row dictionaries, foreign keys, WAL, and busy
+        timeout enabled.
+    """
     path = get_database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30)
@@ -33,6 +48,7 @@ def connect() -> sqlite3.Connection:
 
 
 def init_annotation_db() -> None:
+    """Create or migrate annotation tables in the active database."""
     with connect() as conn:
         conn.executescript(
             """
@@ -144,4 +160,5 @@ def _ensure_sample_embeddings_table(conn: sqlite3.Connection) -> None:
 
 
 def new_uuid() -> str:
+    """Return a new hex UUID string for annotation rows."""
     return uuid4().hex

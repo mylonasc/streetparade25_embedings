@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "ml_pipeline" / "1_labeling" / "backend"))
 
 project = "Street Parade Embeddings"
 author = "Street Parade Embeddings contributors"

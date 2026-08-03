@@ -13,10 +13,12 @@ from .db import connect, get_database_path, init_annotation_db, new_uuid
 
 
 def now() -> str:
+    """Return the current UTC timestamp in ISO-8601 format."""
     return datetime.now(UTC).isoformat()
 
 
 def row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    """Convert an optional SQLite row to a dictionary."""
     return dict(row) if row is not None else None
 
 
@@ -27,6 +29,16 @@ def _require(row: sqlite3.Row | None, detail: str) -> sqlite3.Row:
 
 
 def create_annotation_campaign(name: str, description: str | None, status: str = "active") -> dict[str, Any]:
+    """Create or update an annotation campaign by name.
+
+    Args:
+        name: Unique campaign name.
+        description: Optional human-readable campaign description.
+        status: Campaign status string.
+
+    Returns:
+        Stored campaign row.
+    """
     init_annotation_db()
     timestamp = now()
     with connect() as conn:
@@ -45,12 +57,25 @@ def create_annotation_campaign(name: str, description: str | None, status: str =
 
 
 def list_annotation_campaigns() -> list[dict[str, Any]]:
+    """List annotation campaigns ordered by most recently updated."""
     init_annotation_db()
     with connect() as conn:
         return [dict(row) for row in conn.execute("SELECT * FROM annotation_campaign ORDER BY updated_at DESC, id DESC")]
 
 
 def get_annotation_campaign(campaign_id: int, conn: sqlite3.Connection | None = None) -> dict[str, Any]:
+    """Load one annotation campaign.
+
+    Args:
+        campaign_id: Campaign primary key.
+        conn: Optional existing database connection.
+
+    Returns:
+        Campaign row as a dictionary.
+
+    Raises:
+        HTTPException: If the campaign does not exist.
+    """
     if conn is not None:
         return dict(_require(conn.execute("SELECT * FROM annotation_campaign WHERE id = ?", (campaign_id,)).fetchone(), "annotation_campaign not found"))
     init_annotation_db()
@@ -59,6 +84,7 @@ def get_annotation_campaign(campaign_id: int, conn: sqlite3.Connection | None = 
 
 
 def create_label_set(campaign_id: int, name: str, description: str | None, sort_order: int = 0) -> dict[str, Any]:
+    """Create or update a label set within a campaign."""
     init_annotation_db()
     timestamp = now()
     with connect() as conn:
@@ -83,6 +109,7 @@ def create_label_set(campaign_id: int, name: str, description: str | None, sort_
 
 
 def list_label_sets(campaign_id: int) -> list[dict[str, Any]]:
+    """List label sets for a campaign ordered by sort order and name."""
     init_annotation_db()
     with connect() as conn:
         get_annotation_campaign(campaign_id, conn)
@@ -103,6 +130,11 @@ def create_label(
     sort_order: int = 0,
     is_active: bool = True,
 ) -> dict[str, Any]:
+    """Create or update a label in a label set.
+
+    Returns:
+        Stored label row with ``is_active`` normalized to ``bool``.
+    """
     init_annotation_db()
     timestamp = now()
     with connect() as conn:
@@ -127,6 +159,7 @@ def create_label(
 
 
 def list_labels(label_set_id: int) -> list[dict[str, Any]]:
+    """List labels in a label set ordered by sort order and name."""
     init_annotation_db()
     with connect() as conn:
         _require(conn.execute("SELECT * FROM annotation_label_sets WHERE id = ?", (label_set_id,)).fetchone(), "label set not found")
@@ -137,6 +170,16 @@ def list_labels(label_set_id: int) -> list[dict[str, Any]]:
 
 
 def add_campaign_items(campaign_id: int, track_ids: list[int], track_sample_ids: list[int]) -> list[dict[str, Any]]:
+    """Add track samples to an annotation campaign.
+
+    Args:
+        campaign_id: Campaign primary key.
+        track_ids: Track IDs whose samples should be added.
+        track_sample_ids: Individual sample IDs to add.
+
+    Returns:
+        Updated campaign item list.
+    """
     init_annotation_db()
     timestamp = now()
     with connect() as conn:
@@ -172,6 +215,7 @@ def _sample_rows(conn: sqlite3.Connection, track_ids: list[int], track_sample_id
 
 
 def list_campaign_items(campaign_id: int, conn: sqlite3.Connection | None = None) -> list[dict[str, Any]]:
+    """List annotated samples and joined track/artist metadata for a campaign."""
     query = """
         SELECT
             ai.*,
@@ -203,6 +247,7 @@ def list_campaign_items(campaign_id: int, conn: sqlite3.Connection | None = None
 
 
 def list_campaign_samples(campaign_id: int) -> list[dict[str, Any]]:
+    """List campaign samples with assignment data attached."""
     items = list_campaign_items(campaign_id)
     assignments = list_assignments(campaign_id)
     by_sample: dict[int, list[dict[str, Any]]] = {}
@@ -224,6 +269,7 @@ def _campaign_item_response(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def track_title(track_url: str | None, track_path: str | None) -> str:
+    """Infer a display title from a track URL or cache path."""
     if track_url:
         slug = urlparse(track_url).path.rstrip("/").split("/")[-1]
         if slug:
@@ -234,6 +280,7 @@ def track_title(track_url: str | None, track_path: str | None) -> str:
 
 
 def remove_campaign_item(campaign_id: int, item_id: int) -> dict[str, Any]:
+    """Remove a sample from a campaign and delete its assignments."""
     init_annotation_db()
     with connect() as conn:
         get_annotation_campaign(campaign_id, conn)
@@ -260,6 +307,11 @@ def assign_label(
     confidence: float | None = None,
     notes: str | None = None,
 ) -> dict[str, Any]:
+    """Assign a label to a track sample within a campaign.
+
+    Existing assignments for the same campaign, sample, and label are updated.
+    The sample is added to the campaign automatically if needed.
+    """
     init_annotation_db()
     timestamp = now()
     with connect() as conn:
@@ -322,6 +374,7 @@ def assign_label(
 
 
 def list_assignments(campaign_id: int) -> list[dict[str, Any]]:
+    """List label assignments for a campaign with label metadata."""
     init_annotation_db()
     with connect() as conn:
         get_annotation_campaign(campaign_id, conn)
@@ -342,6 +395,7 @@ def list_assignments(campaign_id: int) -> list[dict[str, Any]]:
 
 
 def remove_assignment(assignment_id: int) -> dict[str, Any]:
+    """Delete one annotation assignment and return the deleted row."""
     init_annotation_db()
     with connect() as conn:
         row = _require(conn.execute("SELECT * FROM annotation_assignments WHERE id = ?", (assignment_id,)).fetchone(), "assignment not found")
@@ -350,6 +404,7 @@ def remove_assignment(assignment_id: int) -> dict[str, Any]:
 
 
 def list_tracks(page: int = 1, page_size: int = 100) -> dict[str, Any]:
+    """List source tracks available for annotation with pagination metadata."""
     init_annotation_db()
     offset = (page - 1) * page_size
     with connect() as conn:
@@ -368,6 +423,7 @@ def list_tracks(page: int = 1, page_size: int = 100) -> dict[str, Any]:
 
 
 def list_track_samples(track_id: int) -> list[dict[str, Any]]:
+    """List annotation-ready samples for one track."""
     init_annotation_db()
     with connect() as conn:
         _require(conn.execute("SELECT id FROM tracks WHERE id = ?", (track_id,)).fetchone(), "track not found")
@@ -385,6 +441,11 @@ def list_track_samples(track_id: int) -> list[dict[str, Any]]:
 
 
 def get_track_path(track_id: int) -> str:
+    """Resolve the local audio path for a track.
+
+    Raises:
+        HTTPException: If the track or audio file cannot be found.
+    """
     init_annotation_db()
     with connect() as conn:
         row = _require(conn.execute("SELECT path FROM tracks WHERE id = ?", (track_id,)).fetchone(), "track not found")
@@ -397,6 +458,7 @@ def get_track_path(track_id: int) -> str:
 
 
 def resolve_audio_path(path_value: str) -> Path | None:
+    """Resolve a stored audio path across database and container roots."""
     original = Path(path_value).expanduser()
     candidates = [original]
     db_parent = get_database_path().parent

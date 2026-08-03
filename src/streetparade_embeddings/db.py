@@ -7,10 +7,17 @@ from uuid import uuid4
 
 
 def db_path() -> Path:
+    """Return the configured SQLite database path."""
     return Path(os.environ.get("STREETPARADE_DB", "streetparade_embeddings.sqlite3"))
 
 
 def connect() -> sqlite3.Connection:
+    """Open a configured SQLite connection for the application database.
+
+    Returns:
+        SQLite connection with row dictionaries, foreign keys, WAL, and a busy
+        timeout enabled.
+    """
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30)
@@ -22,6 +29,7 @@ def connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    """Create or migrate the application database schema in place."""
     with connect() as conn:
         conn.executescript(
             """
@@ -197,6 +205,11 @@ def init_db() -> None:
 
 
 def ensure_artist_columns(conn: sqlite3.Connection) -> None:
+    """Apply additive migrations for artist metadata columns.
+
+    Args:
+        conn: Open application database connection.
+    """
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(artists)")}
     migrations = {
         "uuid": "ALTER TABLE artists ADD COLUMN uuid TEXT",
@@ -215,6 +228,11 @@ def ensure_artist_columns(conn: sqlite3.Connection) -> None:
 
 
 def ensure_track_columns(conn: sqlite3.Connection) -> None:
+    """Apply additive migrations for track status and UUID columns.
+
+    Args:
+        conn: Open application database connection.
+    """
     columns = {row["name"] for row in conn.execute("PRAGMA table_info(tracks)")}
     if "download_status" not in columns:
         conn.execute("ALTER TABLE tracks ADD COLUMN download_status TEXT NOT NULL DEFAULT 'not_started'")
@@ -224,6 +242,11 @@ def ensure_track_columns(conn: sqlite3.Connection) -> None:
 
 
 def ensure_sample_embedding_table(conn: sqlite3.Connection) -> None:
+    """Ensure per-sample embedding metadata storage exists.
+
+    Args:
+        conn: Open application database connection.
+    """
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS sample_embeddings (
@@ -254,6 +277,11 @@ def ensure_sample_embedding_table(conn: sqlite3.Connection) -> None:
 
 
 def ensure_preference_table(conn: sqlite3.Connection) -> None:
+    """Migrate preference event history into current preference state.
+
+    Args:
+        conn: Open application database connection.
+    """
     conn.execute(
         """
         INSERT OR IGNORE INTO user_preferences (
@@ -288,11 +316,21 @@ def ensure_preference_table(conn: sqlite3.Connection) -> None:
 
 
 def ensure_uuid_indexes(conn: sqlite3.Connection) -> None:
+    """Ensure UUID uniqueness indexes for artists and tracks.
+
+    Args:
+        conn: Open application database connection.
+    """
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS artists_uuid_unique ON artists(uuid) WHERE uuid IS NOT NULL")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS tracks_uuid_unique ON tracks(uuid) WHERE uuid IS NOT NULL")
 
 
 def ensure_entity_uuids(conn: sqlite3.Connection) -> None:
+    """Backfill missing artist and track UUIDs.
+
+    Args:
+        conn: Open application database connection.
+    """
     for table in ("artists", "tracks"):
         rows = conn.execute(f"SELECT id FROM {table} WHERE uuid IS NULL OR uuid = ''").fetchall()
         for row in rows:

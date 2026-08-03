@@ -7,6 +7,12 @@ from pathlib import Path
 
 
 def main() -> None:
+    """Seed the configured runtime database from a seed database when empty.
+
+    The source is read from ``STREETPARADE_SEED_DB`` and the destination from
+    ``STREETPARADE_DB``. Copying is skipped when the seed is missing, both paths
+    are the same, or the destination already has embedding rows.
+    """
     seed = Path(os.environ.get("STREETPARADE_SEED_DB", ""))
     target = Path(os.environ.get("STREETPARADE_DB", "streetparade_embeddings.sqlite3"))
     if not seed or not seed.exists() or seed.resolve() == target.resolve():
@@ -24,6 +30,15 @@ def main() -> None:
 
 
 def embedding_count(path: Path) -> int:
+    """Count track embedding rows in a SQLite database.
+
+    Args:
+        path: SQLite database path.
+
+    Returns:
+        Number of rows in ``track_embeddings``, or ``0`` when the database/table
+        cannot be read.
+    """
     if not path.exists():
         return 0
     try:

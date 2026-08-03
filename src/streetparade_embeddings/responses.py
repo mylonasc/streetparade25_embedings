@@ -11,10 +11,26 @@ from .vectorstore import get_vector_store
 
 
 def row_dict(row: sqlite3.Row) -> dict[str, Any]:
+    """Convert a SQLite row to a plain dictionary.
+
+    Args:
+        row: Row returned by a SQLite query.
+
+    Returns:
+        Dictionary keyed by column name.
+    """
     return dict(row)
 
 
 def json_list(value: str | None) -> list[str]:
+    """Decode a JSON list column into a list of strings.
+
+    Args:
+        value: JSON string or ``None`` from SQLite.
+
+    Returns:
+        Decoded string list, or an empty list for missing/non-list values.
+    """
     if not value:
         return []
     loaded = json.loads(value)
@@ -24,6 +40,15 @@ def json_list(value: str | None) -> list[str]:
 
 
 def json_data(value: str | None, default: Any) -> Any:
+    """Decode JSON data with a fallback for missing or invalid values.
+
+    Args:
+        value: JSON string or ``None`` from SQLite.
+        default: Value returned when decoding is not possible.
+
+    Returns:
+        Decoded JSON value or ``default``.
+    """
     if not value:
         return default
     try:
@@ -33,6 +58,14 @@ def json_data(value: str | None, default: Any) -> Any:
 
 
 def artist_response(row: sqlite3.Row) -> dict[str, Any]:
+    """Convert an artist row into the HTTP response shape.
+
+    Args:
+        row: Artist row from SQLite.
+
+    Returns:
+        Response dictionary with JSON columns decoded.
+    """
     result = row_dict(row)
     result["links"] = json_list(result.get("links"))
     result["images"] = json_list(result.get("images"))
@@ -42,6 +75,16 @@ def artist_response(row: sqlite3.Row) -> dict[str, Any]:
 
 
 def track_response(row: sqlite3.Row, include_embedding: bool = False) -> dict[str, Any]:
+    """Convert a track row into the HTTP response shape.
+
+    Args:
+        row: Track row, optionally including joined latest embedding fields.
+        include_embedding: Whether to include the latest vector values.
+
+    Returns:
+        Response dictionary with booleans normalized and embedding metadata
+        summarized.
+    """
     result = row_dict(row)
     result["downloaded"] = bool(result["downloaded"])
     legacy_embedding = result.pop("embedding", None)
@@ -61,6 +104,15 @@ def track_response(row: sqlite3.Row, include_embedding: bool = False) -> dict[st
 
 
 def track_embedding_response(row: sqlite3.Row, include_embedding: bool = False) -> dict[str, Any]:
+    """Convert a track embedding row into the HTTP response shape.
+
+    Args:
+        row: Track embedding row from SQLite.
+        include_embedding: Whether to include vector values from ChromaDB.
+
+    Returns:
+        Response dictionary with provenance JSON decoded.
+    """
     result = row_dict(row)
     result["embedding_model_config"] = json_data(result.get("embedding_model_config"), {})
     result["sampling_strategy"] = json_data(result.get("sampling_strategy"), {})
@@ -71,12 +123,28 @@ def track_embedding_response(row: sqlite3.Row, include_embedding: bool = False) 
 
 
 def track_embedding_count(track_id: int) -> int:
+    """Count stored embedding rows for a track.
+
+    Args:
+        track_id: SQLite track primary key.
+
+    Returns:
+        Number of embedding metadata rows for the track.
+    """
     with connect() as conn:
         row = conn.execute("SELECT COUNT(*) AS count FROM track_embeddings WHERE track_id = ?", (track_id,)).fetchone()
     return int(row["count"])
 
 
 def track_select_sql(where: str) -> str:
+    """Build the common track SELECT query with embedding summary joins.
+
+    Args:
+        where: SQL predicate appended to the query's ``WHERE`` clause.
+
+    Returns:
+        SQL query string selecting track fields plus latest embedding metadata.
+    """
     return f"""
         SELECT
             tracks.*,
@@ -100,6 +168,14 @@ def track_select_sql(where: str) -> str:
 
 
 def embedding_from_blob(blob: bytes | None) -> list[float] | None:
+    """Decode a legacy float32 embedding blob.
+
+    Args:
+        blob: Raw SQLite BLOB containing float32 vector bytes.
+
+    Returns:
+        List of floats, or ``None`` when no blob is present.
+    """
     if blob is None:
         return None
     return np.frombuffer(blob, dtype=np.float32).astype(float).tolist()

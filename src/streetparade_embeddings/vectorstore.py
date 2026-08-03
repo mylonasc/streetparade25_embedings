@@ -10,6 +10,7 @@ DEFAULT_COLLECTION = "track_embeddings"
 
 
 def default_chroma_dir() -> Path:
+    """Return the configured ChromaDB persistence directory."""
     return Path(os.environ.get("STREETPARADE_CHROMA_DIR", "chroma"))
 
 
@@ -38,11 +39,29 @@ class ChromaVectorStore:
         self.collection = self.client.get_or_create_collection(name=collection_name, metadata={"hnsw:space": "cosine"})
 
     def upsert_embedding(self, vector_id: str, embedding: np.ndarray, metadata: dict[str, Any]) -> str:
+        """Insert or replace an embedding vector and metadata.
+
+        Args:
+            vector_id: Stable vector identifier used as the ChromaDB ID.
+            embedding: Numeric vector to store.
+            metadata: Metadata values to store alongside the vector.
+
+        Returns:
+            The stored ``vector_id``.
+        """
         vector = np.asarray(embedding, dtype=np.float32).astype(float).tolist()
         self.collection.upsert(ids=[vector_id], embeddings=[vector], metadatas=[_metadata(metadata)])
         return vector_id
 
     def get_embedding(self, vector_id: str) -> list[float] | None:
+        """Load one embedding vector by ID.
+
+        Args:
+            vector_id: ChromaDB vector identifier.
+
+        Returns:
+            Vector values as floats, or ``None`` when no vector exists.
+        """
         result = self.collection.get(ids=[vector_id], include=["embeddings"])
         embeddings = result.get("embeddings")
         if embeddings is None or len(embeddings) == 0:
@@ -55,6 +74,17 @@ class ChromaVectorStore:
         n_results: int = 10,
         where: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        """Find nearest stored embeddings to a query vector.
+
+        Args:
+            embedding: Query embedding vector.
+            n_results: Maximum number of neighbors to return.
+            where: Optional ChromaDB metadata filter.
+
+        Returns:
+            Ranked result dictionaries with vector IDs, distances, similarities,
+            and metadata.
+        """
         vector = np.asarray(embedding, dtype=np.float32).astype(float).tolist()
         result = self.collection.query(
             query_embeddings=[vector],
@@ -70,6 +100,17 @@ class ChromaVectorStore:
         n_results: int = 10,
         where: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        """Find neighbors for the centroid of existing embeddings.
+
+        Args:
+            vector_ids: Existing vector IDs used to compute the query centroid.
+            n_results: Maximum number of neighbors to return.
+            where: Optional ChromaDB metadata filter.
+
+        Returns:
+            Ranked neighbor results, or an empty list when none of the requested
+            IDs have vectors.
+        """
         vectors = self.collection.get(ids=vector_ids, include=["embeddings"]).get("embeddings")
         if vectors is None or len(vectors) == 0:
             return []
@@ -96,4 +137,12 @@ def _query_result_items(result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def get_vector_store(persist_dir: str | Path | None = None) -> ChromaVectorStore:
+    """Create a Chroma-backed vector store.
+
+    Args:
+        persist_dir: Optional directory overriding ``STREETPARADE_CHROMA_DIR``.
+
+    Returns:
+        Initialized vector store instance.
+    """
     return ChromaVectorStore(persist_dir=persist_dir)
