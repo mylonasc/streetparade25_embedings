@@ -44,6 +44,7 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .toolbar-text-button { padding-inline: 12px; }
 .toggle-button { padding-inline: 12px; }
 .toggle-button.active { color: #06100c; background: var(--accent); }
+.toggle-button.active.predicted { background: #b7ffd9; }
 .empty-warning { position: absolute; z-index: 4; left: 16px; right: 16px; top: 128px; padding: 12px 14px; border: 1px solid rgba(255, 181, 168, 0.4); border-radius: 16px; color: #ffb5a8; background: rgba(80, 24, 18, 0.78); }
 .feature-warning { top: 86px; color: var(--accent); border-color: rgba(133, 245, 196, 0.34); background: rgba(12, 58, 44, 0.72); }
 .map-search { position: absolute; z-index: 5; left: 16px; right: 16px; top: 16px; display: grid; gap: 8px; }
@@ -55,6 +56,8 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .search-results button { width: 100%; padding: 10px 12px; border-radius: 12px; color: var(--text); background: rgba(255,255,255,0.08); text-align: left; font-weight: 750; }
 .search-results span { padding: 6px 8px; color: var(--muted); }
 .side { display: grid; gap: 12px; }
+.side-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.side-tabs button { min-height: 38px; }
 .panel { padding: 16px; }
 .panel h2 { margin: 0 0 12px; }
 .panel form, form.panel { display: grid; gap: 12px; }
@@ -115,6 +118,12 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .playlist-track span { color: inherit; opacity: 0.68; font-size: 0.82rem; font-weight: 900; }
 .playlist-track strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions { display: grid; gap: 10px; }
+.training-panel { display: grid; gap: 10px; }
+.training-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.training-stats span { padding: 9px 10px; border: 1px solid var(--line); border-radius: 14px; color: var(--muted); background: rgba(255,255,255,0.055); font-weight: 800; }
+.training-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.training-options label { display: grid; gap: 6px; color: var(--muted); font-size: 0.82rem; font-weight: 800; }
+.training-options input { min-height: 38px; border-radius: 12px; padding: 8px 10px; }
 .layout-controls { display: grid; gap: 10px; }
 .layout-controls label { display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; font-weight: 800; }
 .layout-controls button { margin-top: 4px; }

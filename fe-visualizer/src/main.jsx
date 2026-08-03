@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import * as d3 from 'd3';
 import {getUserPreferences, request, setUserPreference} from './api.js';
 import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalNumber} from './layoutOptions.js';
+import {DEFAULT_TRAINING_OPTIONS, buildPreferenceDataset, loadPreferenceModel, predictTrackPreferences, savePreferenceModel, summarizeExamples, trainPreferenceModel} from './preferenceTraining.ts';
 import {buildSearchIndex, searchResults} from './search.js';
 import {isMarked, markKey, modelSummary, playlistForPoint, preferenceKeyForPoint, preferenceTarget, visibleMetadataEntries} from './selection.js';
 import {MARKS_KEY, USERNAME_KEY, readMarks} from './storage.js';
@@ -39,6 +40,13 @@ function App() {
   const [focusRequest, setFocusRequest] = useState(null);
   const [selectionMinimized, setSelectionMinimized] = useState(false);
   const [thumbPreferences, setThumbPreferences] = useState({});
+  const [sideTab, setSideTab] = useState('songs');
+  const [embeddedTracks, setEmbeddedTracks] = useState([]);
+  const [preferenceTrainingOptions, setPreferenceTrainingOptions] = useState(DEFAULT_TRAINING_OPTIONS);
+  const [preferenceTrainingStatus, setPreferenceTrainingStatus] = useState('No model trained in this browser yet.');
+  const [preferenceTrainingBusy, setPreferenceTrainingBusy] = useState(false);
+  const [predictedPreferences, setPredictedPreferences] = useState({});
+  const [colorByPredictedPreference, setColorByPredictedPreference] = useState(false);
 
   async function loadAll(activeUsername = username) {
     if (!activeUsername) return;
@@ -228,7 +236,11 @@ function App() {
 
     function handlePointerUp(nextEvent) {
       const deltaY = nextEvent.clientY - startY;
-      if (Math.abs(deltaY) > 34) setSelectionMinimized(deltaY > 0);
+      if (Math.abs(deltaY) > 34) {
+        setSelectionMinimized(deltaY > 0);
+      } else {
+        setSelectionMinimized(true);
+      }
       target.removeEventListener('pointerup', handlePointerUp);
       target.removeEventListener('pointercancel', handlePointerCancel);
       target.releasePointerCapture?.(event.pointerId);
@@ -353,6 +365,60 @@ function App() {
     () => Array.from(new Set(points.map((point) => point.cluster).filter((cluster) => cluster !== null && cluster !== undefined))).sort((a, b) => Number(a) - Number(b)),
     [points],
   );
+  const preferenceTrainingDataset = useMemo(() => buildPreferenceDataset(embeddedTracks, thumbPreferences), [embeddedTracks, thumbPreferences]);
+  const preferenceTrainingSummary = useMemo(() => summarizeExamples(preferenceTrainingDataset.examples, preferenceTrainingDataset.unlabeled), [preferenceTrainingDataset]);
+
+  async function loadEmbeddedTracks() {
+    const tracks = [];
+    let page = 1;
+    while (true) {
+      const data = await request(`/tracks?page=${page}&page_size=500&include_embedding=true`);
+      tracks.push(...(data.tracks || []).filter((track) => Array.isArray(track.embedding) && track.embedding.length));
+      if (!data.has_next) break;
+      page += 1;
+    }
+    setEmbeddedTracks(tracks);
+    return tracks;
+  }
+
+  async function trainPreferenceColorModel() {
+    setError('');
+    setPreferenceTrainingBusy(true);
+    try {
+      const tracks = embeddedTracks.length ? embeddedTracks : await loadEmbeddedTracks();
+      const dataset = buildPreferenceDataset(tracks, thumbPreferences);
+      const summary = summarizeExamples(dataset.examples, dataset.unlabeled);
+      if (!summary.canTrain) throw new Error('Train needs at least one liked and one unliked embedded track.');
+      const trained = await trainPreferenceModel(dataset.examples, preferenceTrainingOptions);
+      await savePreferenceModel(trained);
+      setPredictedPreferences(await predictTrackPreferences(trained, dataset.unlabeled));
+      setColorByPredictedPreference(true);
+      setPreferenceTrainingStatus(`Trained ${summary.total} labels (${summary.likes} liked / ${summary.dislikes} unliked), predicted ${summary.unlabeled} songs.`);
+    } catch (err) {
+      setError(err.message);
+      setPreferenceTrainingStatus(err.message);
+    } finally {
+      setPreferenceTrainingBusy(false);
+    }
+  }
+
+  async function loadPreferenceColorModel() {
+    setError('');
+    setPreferenceTrainingBusy(true);
+    try {
+      const [trained, tracks] = await Promise.all([loadPreferenceModel(), embeddedTracks.length ? Promise.resolve(embeddedTracks) : loadEmbeddedTracks()]);
+      if (!trained) throw new Error('No saved preference model found in this browser.');
+      const dataset = buildPreferenceDataset(tracks, thumbPreferences);
+      setPredictedPreferences(await predictTrackPreferences(trained, dataset.unlabeled));
+      setColorByPredictedPreference(true);
+      setPreferenceTrainingStatus(`Loaded model from ${new Date(trained.trainedAt).toLocaleString()}, predicted ${dataset.unlabeled.length} songs.`);
+    } catch (err) {
+      setError(err.message);
+      setPreferenceTrainingStatus(err.message);
+    } finally {
+      setPreferenceTrainingBusy(false);
+    }
+  }
 
   if (!username) {
     return <UsernameGate draftUsername={draftUsername} setDraftUsername={setDraftUsername} saveUsername={saveUsername} error={error} />;
@@ -386,7 +452,8 @@ function App() {
                   {clusterOptions.map((cluster) => <option key={cluster} value={cluster}>Cluster {cluster}</option>)}
                 </select>
                 <button type="button" className={`secondary toggle-button ${colorByPreference ? 'active' : ''}`} onClick={() => setColorByPreference((value) => !value)}>Liked</button>
-                {(selectedCluster !== null || colorByPreference) && <button type="button" className="secondary" onClick={() => { setSelectedCluster(null); setColorByPreference(false); }}>Clear</button>}
+                <button type="button" className={`secondary toggle-button ${colorByPredictedPreference ? 'active predicted' : ''}`} onClick={() => setColorByPredictedPreference((value) => !value)} disabled={!Object.keys(predictedPreferences).length}>Predicted</button>
+                {(selectedCluster !== null || colorByPreference || colorByPredictedPreference) && <button type="button" className="secondary" onClick={() => { setSelectedCluster(null); setColorByPreference(false); setColorByPredictedPreference(false); }}>Clear</button>}
               </div>
               {searchQuery.trim() && (
                 <div className="search-results">
@@ -414,7 +481,7 @@ function App() {
                 No Street Parade vectors loaded. Check that the API can access the Chroma vector store, especially `./chroma` when using Docker.
               </div>
             )}
-            <Visualizer points={points} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} colorByPreference={colorByPreference} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onSelectArtist={selectArtistForSong} onPlayArtistSong={selectRandomArtistSong} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
+            <Visualizer points={points} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} predictedPreferences={predictedPreferences} colorByPreference={colorByPreference} colorByPredictedPreference={colorByPredictedPreference} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onCanvasClick={() => setSelectionMinimized(true)} onSelectArtist={selectArtistForSong} onPlayArtistSong={selectRandomArtistSong} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
           </section>
 
           <section className={`panel selection-panel ${(selected || playbackPoint) ? 'has-selection' : ''} ${selectionMinimized ? 'is-minimized' : ''}`} aria-live="polite">
@@ -437,8 +504,12 @@ function App() {
         </section>
 
         <aside className="side">
+          <div className="side-tabs">
+            <button type="button" className={sideTab === 'songs' ? '' : 'secondary'} onClick={() => setSideTab('songs')}>Songs</button>
+            <button type="button" className={sideTab === 'training' ? '' : 'secondary'} onClick={() => setSideTab('training')}>Training</button>
+          </div>
           {songDownloadsEnabled && (
-            <>
+            sideTab === 'songs' ? <>
               <form className="panel" onSubmit={submitTrack}>
                 <h2>Add a track</h2>
                 <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="SoundCloud or YouTube URL" required />
@@ -459,7 +530,7 @@ function App() {
                 </div>
                 {!userTracks.length && <p className="muted">No submitted songs yet.</p>}
               </section>
-            </>
+            </> : <PreferenceTrainingPanel options={preferenceTrainingOptions} setOptions={setPreferenceTrainingOptions} summary={preferenceTrainingSummary} status={preferenceTrainingStatus} busy={preferenceTrainingBusy} onLoadTracks={loadEmbeddedTracks} onTrain={trainPreferenceColorModel} onLoadModel={loadPreferenceColorModel} />
           )}
 
           <section className="panel actions">
@@ -481,6 +552,30 @@ function App() {
       )}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </main>
+  );
+}
+
+function PreferenceTrainingPanel({options, setOptions, summary, status, busy, onLoadTracks, onTrain, onLoadModel}) {
+  return (
+    <section className="panel training-panel">
+      <h2>Preference training</h2>
+      <p className="muted">Train a browser-local TensorFlow.js model from liked/unliked CLAP embeddings, then color remaining songs by predicted preference.</p>
+      <div className="training-stats">
+        <span>{summary.total} labels</span>
+        <span>{summary.likes} liked</span>
+        <span>{summary.dislikes} unliked</span>
+        <span>{summary.unlabeled} unlabeled</span>
+      </div>
+      <div className="training-options">
+        <label>Epochs<input type="number" min="1" max="300" value={options.epochs} onChange={(event) => setOptions({...options, epochs: Number(event.target.value)})} /></label>
+        <label>Seed<input type="number" min="0" max="999999999" value={options.randomSeed} onChange={(event) => setOptions({...options, randomSeed: Number(event.target.value)})} /></label>
+      </div>
+      <button type="button" className="secondary" onClick={onLoadTracks} disabled={busy}>Refresh embeddings</button>
+      <button type="button" onClick={onTrain} disabled={busy || !summary.canTrain}>{busy ? 'Working...' : 'Train model'}</button>
+      <button type="button" className="secondary" onClick={onLoadModel} disabled={busy}>Load saved model</button>
+      <p className="muted">{status}</p>
+      {!summary.canTrain && <p className="error-text">Needs at least one liked and one unliked embedded track.</p>}
+    </section>
   );
 }
 
@@ -566,12 +661,21 @@ function edgeTooltipHtml(edge, byId) {
   return `<strong>Similarity edge</strong>${rows.map(([key, value]) => `<span>${escapeHtml(key)}: ${escapeHtml(value)}</span>`).join('')}`;
 }
 
-function pointFill(point, clusterColor, thumbPreferences, colorByPreference) {
+function pointFill(point, clusterColor, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference) {
   if (colorByPreference) {
     const preference = thumbPreferences?.[preferenceKeyForPoint(point)];
     if (preference === 'up') return '#85f5c4';
     if (preference === 'down') return '#ff5c35';
     return point.kind === 'artist' ? 'rgba(133, 245, 196, 0.42)' : 'rgba(154, 168, 189, 0.46)';
+  }
+  if (colorByPredictedPreference) {
+    const preference = thumbPreferences?.[preferenceKeyForPoint(point)];
+    const prediction = predictedPreferences?.[preferenceKeyForPoint(point)];
+    if (preference === 'up') return '#85f5c4';
+    if (preference === 'down') return '#ff5c35';
+    if (prediction?.value === 'up') return '#b7ffd9';
+    if (prediction?.value === 'down') return '#ff9a7f';
+    return point.kind === 'artist' ? 'rgba(133, 245, 196, 0.42)' : 'rgba(154, 168, 189, 0.38)';
   }
   if (point.kind === 'user_track') return '#ff5c35';
   if (point.kind === 'artist') return '#85f5c4';
@@ -795,7 +899,7 @@ function UsernameGate({draftUsername, setDraftUsername, saveUsername, error}) {
   );
 }
 
-function Visualizer({points, selected, setSelected, marks, thumbPreferences, colorByPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong}) {
+function Visualizer({points, selected, setSelected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong}) {
   const ref = useRef(null);
   const tooltipRef = useRef(null);
   const transformRef = useRef(d3.zoomIdentity);
@@ -843,11 +947,14 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, col
 
     function pointState(point) {
       const isSelected = selected?.id === point.id;
+      const hasThumbPreference = Boolean(thumbPreferences?.[preferenceKeyForPoint(point)]);
+      const hasPredictedPreference = Boolean(predictedPreferences?.[preferenceKeyForPoint(point)]);
       let alpha = 1;
       if (hasSearch && !searchMatchIds?.has(point.id)) alpha = Math.min(alpha, 0.22);
       if (selectedCluster !== null && point.cluster !== selectedCluster) alpha = Math.min(alpha, 0.18);
-      if (selected?.id && !isSelected) alpha = Math.min(alpha, 0.24);
-      if (colorByPreference && !thumbPreferences?.[preferenceKeyForPoint(point)]) alpha = Math.min(alpha, 0.36);
+      if (selected?.id && !isSelected && !(colorByPreference && hasThumbPreference) && !(colorByPredictedPreference && (hasThumbPreference || hasPredictedPreference))) alpha = Math.min(alpha, 0.24);
+      if (colorByPreference && !hasThumbPreference) alpha = Math.min(alpha, 0.36);
+      if (colorByPredictedPreference && !hasThumbPreference && !hasPredictedPreference) alpha = Math.min(alpha, 0.32);
       return {
         isSelected,
         isMarked: isMarked(point, marks),
@@ -872,7 +979,7 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, col
       context.beginPath();
       symbol.type(point.kind === 'user_track' ? d3.symbolStar : point.kind === 'artist' ? d3.symbolDiamond : d3.symbolCircle).size(size)();
       context.globalAlpha = state.alpha;
-      context.fillStyle = pointFill(point, color, thumbPreferences, colorByPreference);
+      context.fillStyle = pointFill(point, color, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference);
       context.fill();
       context.lineWidth = state.isSelected ? 4 : state.isLinked || state.isSearchMatch || state.isClusterMatch ? 3 : 1.2;
       context.strokeStyle = state.isSelected ? '#fff' : state.isSearchMatch || state.isClusterMatch ? '#ffd166' : state.isLinked || state.isMarked ? '#85f5c4' : 'rgba(255,255,255,0.85)';
@@ -1005,6 +1112,7 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, col
     }
 
     function handleClick(event) {
+      onCanvasClick?.();
       const point = nearestPoint(event);
       if (point) setSelected(point);
     };
@@ -1095,7 +1203,7 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, col
       tooltipRef.current?.removeEventListener('mouseleave', handleTooltipLeave);
       selection.on('.zoom', null);
     };
-  }, [points, selected, marks, thumbPreferences, colorByPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong, sizeVersion]);
+  }, [points, selected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong, sizeVersion]);
 
   return <><canvas ref={ref} className="plot" /><div ref={tooltipRef} className="tooltip" hidden /></>;
 }
