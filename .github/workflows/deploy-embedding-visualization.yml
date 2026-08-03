@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: src
+      DATA_RELEASE_TAG: embedding-visualization-data-v1
+      DATA_RELEASE_ASSET: streetparade-pages-data.tar.gz
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,12 +34,29 @@ jobs:
       - name: Install visualization dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy scikit-learn
+          python -m pip install chromadb numpy scikit-learn
+
+      - name: Download release data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/streetparade-pages-data
+          gh release download "$DATA_RELEASE_TAG" \
+            --pattern "$DATA_RELEASE_ASSET" \
+            --dir /tmp/streetparade-pages-data
+          tar -xzf "/tmp/streetparade-pages-data/$DATA_RELEASE_ASSET" -C .
+
+      - name: Create static data snapshot
+        run: |
+          python scripts/create_static_data_snapshot.py \
+            --db streetparade_embeddings.sqlite3 \
+            --chroma-dir chroma \
+            --out /tmp/streetparade-static-data-snapshot.json
 
       - name: Build SoundCloud visualization site
         run: |
           python scripts/build_embedding_visualization.py \
-            --snapshot scripts/.data_cache/static_data_snapshot.json \
+            --snapshot /tmp/streetparade-static-data-snapshot.json \
             --out site \
             --playback soundcloud \
             --audio-assets none \

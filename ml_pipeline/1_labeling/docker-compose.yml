@@ -1,0 +1,29 @@
+services:
+  annotation-api:
+    build:
+      context: ../..
+      dockerfile: ml_pipeline/1_labeling/backend/Dockerfile
+    environment:
+      STREETPARADE_DB: /data/streetparade_embeddings.sqlite3
+      STREETPARADE_CHROMA_DIR: /app/chroma
+      ANNOTATION_AUDIO_ROOTS: /app/.songs_cache
+      ANNOTATION_CORS_ORIGINS: http://localhost:3100,http://localhost:5175,http://127.0.0.1:3100,http://127.0.0.1:5175
+    ports:
+      - "8100:8100"
+    volumes:
+      - ../../data:/data
+      - ../../chroma:/app/chroma
+      - ../../.songs_cache:/app/.songs_cache
+    restart: unless-stopped
+
+  annotation-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_ANNOTATION_API_BASE_URL: http://localhost:8100
+    ports:
+      - "3100:80"
+    depends_on:
+      - annotation-api
+    restart: unless-stopped

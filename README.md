@@ -42,8 +42,11 @@ Discover track URLs from a SoundCloud artist page:
 from streetparade_embeddings.soundcloud import DiscoveryMethod, SoundCloudTrackDiscoverer
 
 discoverer = SoundCloudTrackDiscoverer(method=DiscoveryMethod.YT_DLP)
-track_urls = discoverer.discover("https://soundcloud.com/hilitkolet")
+track_urls = discoverer.discover("https://soundcloud.com/asdf-asdf-asdf")
 ```
+
+> [!CAUTION]
+> Downloading from soundcloud and youtube automatically can get your IP or account banned or rate limited! Use at your own risk and apply your own judjement.
 
 Download a single SoundCloud track URL directly:
 
@@ -65,7 +68,7 @@ from streetparade_embeddings.config import PipelineConfig
 from streetparade_embeddings.pipeline import download_youtube_track
 
 config = PipelineConfig(data_dir=".")
-download = download_youtube_track(config, "https://www.youtube.com/watch?v=1Hx3PGeADmc")
+download = download_youtube_track(config, "https://www.youtube.com/watch?v=CRVI-Mk0cEc")
 print(download.path)
 ```
 
@@ -94,7 +97,9 @@ Set `STREETPARADE_CHROMA_DIR` to choose the ChromaDB persistence directory. It d
 
 Embedding compute requests are queued. The server owns one lazy CLAP model instance per model/device/configuration and reuses it across queued jobs. Vectors are stored in local ChromaDB storage, while SQLite stores track, artist, sampling, model, job, user-track, layout, and share metadata. Cancellation is cooperative: queued jobs are cancelled immediately, while running jobs stop between tracks.
 
-Example flow:
+<details>
+
+<summary> Example flow </summary>
 
 ```bash
 curl -X POST http://127.0.0.1:8000/artists \
@@ -113,8 +118,15 @@ curl http://127.0.0.1:8000/embedding-jobs/<job-id>
 
 curl http://127.0.0.1:8000/artists/1/embeddings
 ```
+</details>
 
-Useful pipeline endpoints:
+
+
+<details>
+
+<summary>Useful endpoints:</summary>
+
+## Useful pipeline endpoints:
 
 - `GET /health`: check API availability.
 - `POST /artists`: create or update an artist with profile links, images, info, bio, and social URLs.
@@ -137,7 +149,7 @@ Useful pipeline endpoints:
 - `GET /artists/{artist_id}/embeddings`: retrieve per-track embeddings plus the per-artist average embedding.
 - `POST /similarity/track-embeddings`: find similar track embeddings from a raw vector, vector IDs, or track IDs.
 
-Useful visualizer/user endpoints:
+## Useful visualizer/user endpoints:
 
 - `POST /users`: create or retrieve a public username.
 - `GET /users/{username}`: fetch one user profile.
@@ -165,6 +177,8 @@ Useful visualizer/user endpoints:
 - `tsne_learning_rate`: numeric value or `auto`.
 - `tsne_metric`: `cosine`, `euclidean`, or `manhattan`.
 - `random_state`: deterministic seed for reproducible recomputes.
+
+</details>
 
 ## Docker Services
 
@@ -294,20 +308,20 @@ Use `--max-tracks-per-artist 0` to process all discovered tracks for each artist
 
 ## Static Embedding Visualization
 
-Create the compact static-data snapshot used by GitHub Pages:
+Create a compact static-data snapshot from local SQLite and Chroma data:
 
 ```bash
 uv run python scripts/create_static_data_snapshot.py \
   --db streetparade_embeddings.sqlite3 \
   --chroma-dir chroma \
-  --out scripts/.data_cache/static_data_snapshot.json
+  --out /tmp/streetparade-static-data-snapshot.json
 ```
 
 Generate a static D3.js t-SNE scatterplot from the snapshot:
 
 ```bash
 uv run python scripts/build_embedding_visualization.py \
-  --snapshot scripts/.data_cache/static_data_snapshot.json \
+  --snapshot /tmp/streetparade-static-data-snapshot.json \
   --out outputs/embedding_visualization \
   --playback local \
   --start-fraction 0.5
@@ -317,14 +331,14 @@ Generate a SoundCloud-player version instead:
 
 ```bash
 uv run python scripts/build_embedding_visualization.py \
-  --snapshot scripts/.data_cache/static_data_snapshot.json \
+  --snapshot /tmp/streetparade-static-data-snapshot.json \
   --out site \
   --playback soundcloud \
   --audio-assets none \
   --start-fraction 0.5
 ```
 
-The snapshot script reads the latest track vectors from ChromaDB and the required artist/track metadata from SQLite, then writes `scripts/.data_cache/static_data_snapshot.json`. The visualization script reads that snapshot, computes artist-average points, projects all points to 2D with t-SNE, clusters the original full-dimensional vectors with spectral clustering, and writes `index.html`, `app.js`, `styles.css`, and `data.json`. Live `chroma/` and `*.sqlite3` files are runtime artifacts and should not be committed.
+The snapshot script reads the latest track vectors from ChromaDB and the required artist/track metadata from SQLite. The visualization script reads that snapshot, computes artist-average points, projects all points to 2D with t-SNE, clusters the original full-dimensional vectors with spectral clustering, and writes `index.html`, `app.js`, `styles.css`, and `data.json`. Live `chroma/`, `*.sqlite3`, `site/`, and `scripts/.data_cache/*.json` files are runtime or generated artifacts and should not be committed.
 
 Serve the site with the range-aware helper so browser audio seeking works reliably:
 
@@ -336,16 +350,7 @@ Useful options include `--clusters N`, `--perplexity N`, `--tracks-only`, `--mod
 
 ## GitHub Pages
 
-The repository includes `.github/workflows/deploy-embedding-visualization.yml`, which rebuilds the static visualization into `site/` on every push to `main` and deploys it with GitHub Pages.
-
-Before enabling the workflow, make sure the repository contains an up-to-date static snapshot:
-
-```bash
-python scripts/create_static_data_snapshot.py \
-  --db streetparade_embeddings.sqlite3 \
-  --chroma-dir chroma \
-  --out scripts/.data_cache/static_data_snapshot.json
-```
+The repository includes `.github/workflows/deploy-embedding-visualization.yml`, which downloads versioned SQLite and Chroma data from a GitHub Release, creates the static snapshot inside the workflow, rebuilds the static visualization into `site/`, and deploys it with GitHub Pages. See `scripts/README.md` for the release artifact format and update commands.
 
 Then enable GitHub Pages in the repository settings with `Build and deployment` set to `GitHub Actions`.
 

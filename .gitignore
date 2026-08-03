@@ -5,6 +5,8 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 outputs/
+site/
+scripts/.data_cache/*.json
 docs/_build/
 node_modules/
 dist/
