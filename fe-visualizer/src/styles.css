@@ -56,7 +56,7 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .search-results button { width: 100%; padding: 10px 12px; border-radius: 12px; color: var(--text); background: rgba(255,255,255,0.08); text-align: left; font-weight: 750; }
 .search-results span { padding: 6px 8px; color: var(--muted); }
 .side { display: grid; gap: 12px; }
-.side-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.side-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .side-tabs button { min-height: 38px; }
 .panel { padding: 16px; }
 .panel h2 { margin: 0 0 12px; }
@@ -124,6 +124,32 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .training-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .training-options label { display: grid; gap: 6px; color: var(--muted); font-size: 0.82rem; font-weight: 800; }
 .training-options input { min-height: 38px; border-radius: 12px; padding: 8px 10px; }
+.training-curve, .training-evaluation { padding: 10px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,0.045); }
+.curve-legend { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; color: var(--muted); font-size: 0.78rem; font-weight: 800; }
+.curve-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.curve-legend i { width: 18px; height: 3px; border-radius: 999px; }
+.curve-legend .train { background: var(--accent); }
+.curve-legend .val { background: #ffd166; }
+.training-curve svg { display: block; width: 100%; height: auto; }
+.training-curve line { stroke: rgba(255,255,255,0.18); stroke-width: 1.1; }
+.training-curve text { fill: var(--muted); font-size: 10px; }
+.training-curve path { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.training-curve .train-loss { stroke: var(--accent); }
+.training-curve .val-loss { stroke: #ffd166; }
+.training-evaluation { display: grid; gap: 10px; }
+.training-evaluation-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.evaluation-toggle { display: flex; gap: 6px; }
+.evaluation-toggle button { min-height: 30px; padding: 5px 9px; font-size: 0.76rem; }
+.training-metrics, .mini-confusion { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.training-metrics span, .mini-confusion span { padding: 8px; border-radius: 12px; color: var(--muted); background: rgba(255,255,255,0.055); font-size: 0.78rem; font-weight: 800; }
+.training-metrics b, .mini-confusion b { display: block; color: var(--text); font-size: 1rem; }
+.artist-favorites-panel { display: grid; gap: 10px; }
+.artist-favorites-list { display: grid; gap: 10px; max-height: 620px; overflow: auto; }
+.artist-favorite-row { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.055); }
+.artist-title { width: 100%; min-height: auto; padding: 0; color: var(--text); background: transparent; text-align: left; border-radius: 0; overflow-wrap: anywhere; }
+.artist-score-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.artist-score-grid span { padding: 7px 8px; border-radius: 12px; color: var(--muted); background: rgba(255,255,255,0.055); font-size: 0.76rem; font-weight: 800; text-align: center; }
+.artist-favorite-actions { display: flex; gap: 8px; }
 .layout-controls { display: grid; gap: 10px; }
 .layout-controls label { display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; font-weight: 800; }
 .layout-controls button { margin-top: 4px; }

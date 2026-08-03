@@ -39,12 +39,30 @@ export type Normalizer = {
   std: number[];
 };
 
+export type LossPoint = {
+  epoch: number;
+  loss: number;
+  valLoss: number | null;
+};
+
+export type Evaluation = {
+  count: number;
+  positives: number;
+  negatives: number;
+  accuracy: number | null;
+  rocAuc: number | null;
+  prAuc: number | null;
+  confusion: {tp: number; fp: number; tn: number; fn: number};
+};
+
 export type TrainedPreferenceModel = {
   model: tf.LayersModel;
   normalizer: Normalizer;
   dimension: number;
   trainedAt: string;
   options: TrainingOptions;
+  lossHistory: LossPoint[];
+  evaluation: {train: Evaluation; validation: Evaluation};
 };
 
 export const DEFAULT_TRAINING_OPTIONS: TrainingOptions = {
@@ -95,18 +113,33 @@ export async function trainPreferenceModel(examples: PreferenceExample[], option
   const normalizer = normalizerFromRows(trainRows);
   const xs = tf.tensor2d(trainRows.map((row) => standardizeRow(row, normalizer)), [split.train.length, dimension]);
   const ys = tf.tensor2d(split.train.map((example) => [example.label]), [split.train.length, 1]);
+  const validation = tensorsForExamples(split.validation, normalizer, dimension);
   const model = createModel(dimension, options);
   try {
-    await model.fit(xs, ys, {
+    const history = await model.fit(xs, ys, {
       epochs: options.epochs,
       batchSize: Math.min(options.batchSize, split.train.length),
       shuffle: false,
       verbose: 0,
+      ...(validation ? {validationData: [validation.xs, validation.ys]} : {}),
     });
-    return {model, normalizer, dimension, trainedAt: new Date().toISOString(), options};
+    return {
+      model,
+      normalizer,
+      dimension,
+      trainedAt: new Date().toISOString(),
+      options,
+      lossHistory: lossHistoryFromTfHistory(history.history),
+      evaluation: {
+        train: await evaluatePreferenceModel(model, normalizer, split.train),
+        validation: await evaluatePreferenceModel(model, normalizer, split.validation),
+      },
+    };
   } finally {
     xs.dispose();
     ys.dispose();
+    validation?.xs.dispose();
+    validation?.ys.dispose();
   }
 }
 
@@ -136,6 +169,8 @@ export async function savePreferenceModel(trained: TrainedPreferenceModel) {
     dimension: trained.dimension,
     trainedAt: trained.trainedAt,
     options: trained.options,
+    lossHistory: trained.lossHistory,
+    evaluation: trained.evaluation,
   }));
 }
 
@@ -145,6 +180,10 @@ export async function loadPreferenceModel(): Promise<TrainedPreferenceModel | nu
   const metadata = JSON.parse(raw);
   const model = await tf.loadLayersModel(MODEL_URL);
   return {...metadata, model};
+}
+
+export function hasSavedPreferenceModel() {
+  return Boolean(localStorage.getItem(MODEL_META_KEY));
 }
 
 function createModel(dimension: number, options: TrainingOptions) {
@@ -177,7 +216,95 @@ function createTrainValidationSplit(examples: PreferenceExample[], validationFra
   };
   const positiveSplit = splitClass(positives);
   const negativeSplit = splitClass(negatives);
-  return {train: seededShuffle([...positiveSplit.train, ...negativeSplit.train], seed + 2)};
+  return {
+    train: seededShuffle([...positiveSplit.train, ...negativeSplit.train], seed + 2),
+    validation: seededShuffle([...positiveSplit.validation, ...negativeSplit.validation], seed + 3),
+  };
+}
+
+function tensorsForExamples(examples: PreferenceExample[], normalizer: Normalizer, dimension: number) {
+  if (!examples.length) return null;
+  return {
+    xs: tf.tensor2d(examples.map((example) => standardizeRow(l2Normalize(example.embedding), normalizer)), [examples.length, dimension]),
+    ys: tf.tensor2d(examples.map((example) => [example.label]), [examples.length, 1]),
+  };
+}
+
+async function evaluatePreferenceModel(model: tf.LayersModel, normalizer: Normalizer, examples: PreferenceExample[]): Promise<Evaluation> {
+  if (!examples.length) return emptyEvaluation();
+  const dimension = examples[0].embedding.length;
+  const xs = tf.tensor2d(examples.map((example) => standardizeRow(l2Normalize(example.embedding), normalizer)), [examples.length, dimension]);
+  const prediction = model.predict(xs) as tf.Tensor;
+  const scores = await prediction.data();
+  xs.dispose();
+  prediction.dispose();
+  return metricsForPredictions(examples.map((example, index) => ({label: example.label, score: Number(scores[index])})));
+}
+
+function lossHistoryFromTfHistory(history: tf.History['history']): LossPoint[] {
+  return (history.loss || []).map((loss, index) => ({
+    epoch: index + 1,
+    loss: Number(loss),
+    valLoss: history.val_loss?.[index] === undefined ? null : Number(history.val_loss[index]),
+  }));
+}
+
+function metricsForPredictions(predictions: Array<{label: 0 | 1; score: number}>): Evaluation {
+  const confusion = {tp: 0, fp: 0, tn: 0, fn: 0};
+  for (const item of predictions) {
+    if (item.label === 1 && item.score >= 0.5) confusion.tp += 1;
+    if (item.label === 0 && item.score >= 0.5) confusion.fp += 1;
+    if (item.label === 0 && item.score < 0.5) confusion.tn += 1;
+    if (item.label === 1 && item.score < 0.5) confusion.fn += 1;
+  }
+  const positives = predictions.filter((item) => item.label === 1).length;
+  const negatives = predictions.length - positives;
+  return {
+    count: predictions.length,
+    positives,
+    negatives,
+    accuracy: predictions.length ? (confusion.tp + confusion.tn) / predictions.length : null,
+    rocAuc: rocAuc(predictions),
+    prAuc: prAuc(predictions),
+    confusion,
+  };
+}
+
+function emptyEvaluation(): Evaluation {
+  return {count: 0, positives: 0, negatives: 0, accuracy: null, rocAuc: null, prAuc: null, confusion: {tp: 0, fp: 0, tn: 0, fn: 0}};
+}
+
+function rocAuc(predictions: Array<{label: 0 | 1; score: number}>) {
+  const positives = predictions.filter((item) => item.label === 1);
+  const negatives = predictions.filter((item) => item.label === 0);
+  if (!positives.length || !negatives.length) return null;
+  let wins = 0;
+  for (const positive of positives) {
+    for (const negative of negatives) {
+      if (positive.score > negative.score) wins += 1;
+      else if (positive.score === negative.score) wins += 0.5;
+    }
+  }
+  return wins / (positives.length * negatives.length);
+}
+
+function prAuc(predictions: Array<{label: 0 | 1; score: number}>) {
+  const sorted = [...predictions].sort((a, b) => b.score - a.score);
+  const positiveCount = sorted.filter((item) => item.label === 1).length;
+  if (!positiveCount || positiveCount === sorted.length) return null;
+  let tp = 0;
+  let fp = 0;
+  let previousRecall = 0;
+  let area = 0;
+  for (const item of sorted) {
+    if (item.label === 1) tp += 1;
+    else fp += 1;
+    const recall = tp / positiveCount;
+    const precision = tp / (tp + fp);
+    area += (recall - previousRecall) * precision;
+    previousRecall = recall;
+  }
+  return area;
 }
 
 function seededShuffle<T extends {key: string}>(items: T[], seed: number) {

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import * as d3 from 'd3';
 import {getUserPreferences, request, setUserPreference} from './api.js';
 import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalNumber} from './layoutOptions.js';
-import {DEFAULT_TRAINING_OPTIONS, buildPreferenceDataset, loadPreferenceModel, predictTrackPreferences, savePreferenceModel, summarizeExamples, trainPreferenceModel} from './preferenceTraining.ts';
+import {DEFAULT_TRAINING_OPTIONS, buildPreferenceDataset, hasSavedPreferenceModel, loadPreferenceModel, predictTrackPreferences, savePreferenceModel, summarizeExamples, trainPreferenceModel} from './preferenceTraining.ts';
 import {buildSearchIndex, searchResults} from './search.js';
 import {isMarked, markKey, modelSummary, playlistForPoint, preferenceKeyForPoint, preferenceTarget, visibleMetadataEntries} from './selection.js';
 import {MARKS_KEY, USERNAME_KEY, readMarks} from './storage.js';
@@ -29,6 +29,7 @@ function App() {
   const [songDownloadsEnabled, setSongDownloadsEnabled] = useState(true);
   const [layoutOptions, setLayoutOptions] = useState(DEFAULT_LAYOUT_OPTIONS);
   const [showLayoutModal, setShowLayoutModal] = useState(false);
+  const [showSavedModelPrompt, setShowSavedModelPrompt] = useState(false);
   const [linkedTrackIds, setLinkedTrackIds] = useState(new Set());
   const [similarityEdges, setSimilarityEdges] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,6 +46,9 @@ function App() {
   const [preferenceTrainingOptions, setPreferenceTrainingOptions] = useState(DEFAULT_TRAINING_OPTIONS);
   const [preferenceTrainingStatus, setPreferenceTrainingStatus] = useState('No model trained in this browser yet.');
   const [preferenceTrainingBusy, setPreferenceTrainingBusy] = useState(false);
+  const [preferenceLossHistory, setPreferenceLossHistory] = useState([]);
+  const [preferenceEvaluation, setPreferenceEvaluation] = useState(null);
+  const [preferenceEvaluationSplit, setPreferenceEvaluationSplit] = useState('validation');
   const [predictedPreferences, setPredictedPreferences] = useState({});
   const [colorByPredictedPreference, setColorByPredictedPreference] = useState(false);
 
@@ -135,6 +139,25 @@ function App() {
   async function toggleThumb(point, value) {
     const target = preferenceTarget(point);
     const key = preferenceKeyForPoint(point);
+    if (!target || !key || !username) return;
+    const nextValue = thumbPreferences[key] === value ? null : value;
+    setThumbPreferences((existing) => {
+      const next = {...existing};
+      if (nextValue) next[key] = nextValue;
+      else delete next[key];
+      return next;
+    });
+    try {
+      setThumbPreferences(await setUserPreference(username, target, nextValue || 'clear'));
+    } catch (err) {
+      setError(err.message);
+      await loadAll();
+    }
+  }
+
+  async function setArtistPreference(artistPoint, value) {
+    const target = preferenceTarget(artistPoint);
+    const key = preferenceKeyForPoint(artistPoint);
     if (!target || !key || !username) return;
     const nextValue = thumbPreferences[key] === value ? null : value;
     setThumbPreferences((existing) => {
@@ -279,6 +302,11 @@ function App() {
   }, [username]);
 
   useEffect(() => {
+    if (!username || !hasSavedPreferenceModel()) return;
+    setShowSavedModelPrompt(true);
+  }, [username]);
+
+  useEffect(() => {
     function handleKeyDown(event) {
       if (!event.ctrlKey || event.metaKey || event.altKey || isEditingTarget(event.target)) return;
       const key = event.key.toLowerCase();
@@ -367,6 +395,7 @@ function App() {
   );
   const preferenceTrainingDataset = useMemo(() => buildPreferenceDataset(embeddedTracks, thumbPreferences), [embeddedTracks, thumbPreferences]);
   const preferenceTrainingSummary = useMemo(() => summarizeExamples(preferenceTrainingDataset.examples, preferenceTrainingDataset.unlabeled), [preferenceTrainingDataset]);
+  const artistSummaries = useMemo(() => buildArtistSummaries(points, thumbPreferences, predictedPreferences), [points, thumbPreferences, predictedPreferences]);
 
   async function loadEmbeddedTracks() {
     const tracks = [];
@@ -391,6 +420,9 @@ function App() {
       if (!summary.canTrain) throw new Error('Train needs at least one liked and one unliked embedded track.');
       const trained = await trainPreferenceModel(dataset.examples, preferenceTrainingOptions);
       await savePreferenceModel(trained);
+      setPreferenceLossHistory(trained.lossHistory || []);
+      setPreferenceEvaluation(trained.evaluation || null);
+      setPreferenceEvaluationSplit(trained.evaluation?.validation?.count ? 'validation' : 'train');
       setPredictedPreferences(await predictTrackPreferences(trained, dataset.unlabeled));
       setColorByPredictedPreference(true);
       setPreferenceTrainingStatus(`Trained ${summary.total} labels (${summary.likes} liked / ${summary.dislikes} unliked), predicted ${summary.unlabeled} songs.`);
@@ -409,8 +441,12 @@ function App() {
       const [trained, tracks] = await Promise.all([loadPreferenceModel(), embeddedTracks.length ? Promise.resolve(embeddedTracks) : loadEmbeddedTracks()]);
       if (!trained) throw new Error('No saved preference model found in this browser.');
       const dataset = buildPreferenceDataset(tracks, thumbPreferences);
+      setPreferenceLossHistory(trained.lossHistory || []);
+      setPreferenceEvaluation(trained.evaluation || null);
+      setPreferenceEvaluationSplit(trained.evaluation?.validation?.count ? 'validation' : 'train');
       setPredictedPreferences(await predictTrackPreferences(trained, dataset.unlabeled));
       setColorByPredictedPreference(true);
+      setShowSavedModelPrompt(false);
       setPreferenceTrainingStatus(`Loaded model from ${new Date(trained.trainedAt).toLocaleString()}, predicted ${dataset.unlabeled.length} songs.`);
     } catch (err) {
       setError(err.message);
@@ -507,9 +543,10 @@ function App() {
           <div className="side-tabs">
             <button type="button" className={sideTab === 'songs' ? '' : 'secondary'} onClick={() => setSideTab('songs')}>Songs</button>
             <button type="button" className={sideTab === 'training' ? '' : 'secondary'} onClick={() => setSideTab('training')}>Training</button>
+            <button type="button" className={sideTab === 'artists' ? '' : 'secondary'} onClick={() => setSideTab('artists')}>Artists</button>
           </div>
-          {songDownloadsEnabled && (
-            sideTab === 'songs' ? <>
+          {sideTab === 'songs' && songDownloadsEnabled && (
+            <>
               <form className="panel" onSubmit={submitTrack}>
                 <h2>Add a track</h2>
                 <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="SoundCloud or YouTube URL" required />
@@ -530,8 +567,11 @@ function App() {
                 </div>
                 {!userTracks.length && <p className="muted">No submitted songs yet.</p>}
               </section>
-            </> : <PreferenceTrainingPanel options={preferenceTrainingOptions} setOptions={setPreferenceTrainingOptions} summary={preferenceTrainingSummary} status={preferenceTrainingStatus} busy={preferenceTrainingBusy} onLoadTracks={loadEmbeddedTracks} onTrain={trainPreferenceColorModel} onLoadModel={loadPreferenceColorModel} />
+            </>
           )}
+          {sideTab === 'songs' && !songDownloadsEnabled && <section className="panel"><h2>My songs</h2><p className="muted">Song downloads and embeddings are disabled on this deployment.</p></section>}
+          {sideTab === 'training' && <PreferenceTrainingPanel options={preferenceTrainingOptions} setOptions={setPreferenceTrainingOptions} summary={preferenceTrainingSummary} status={preferenceTrainingStatus} busy={preferenceTrainingBusy} lossHistory={preferenceLossHistory} evaluation={preferenceEvaluation} evaluationSplit={preferenceEvaluationSplit} setEvaluationSplit={setPreferenceEvaluationSplit} onLoadTracks={loadEmbeddedTracks} onTrain={trainPreferenceColorModel} onLoadModel={loadPreferenceColorModel} />}
+          {sideTab === 'artists' && <ArtistFavoritesPanel artists={artistSummaries} onPreference={setArtistPreference} onSelect={(point) => selectPoint(point, {focus: true})} />}
 
           <section className="panel actions">
             <h2>Map layout</h2>
@@ -551,11 +591,13 @@ function App() {
         />
       )}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showSavedModelPrompt && <SavedModelPrompt onLoad={loadPreferenceColorModel} onClose={() => setShowSavedModelPrompt(false)} busy={preferenceTrainingBusy} />}
     </main>
   );
 }
 
-function PreferenceTrainingPanel({options, setOptions, summary, status, busy, onLoadTracks, onTrain, onLoadModel}) {
+function PreferenceTrainingPanel({options, setOptions, summary, status, busy, lossHistory, evaluation, evaluationSplit, setEvaluationSplit, onLoadTracks, onTrain, onLoadModel}) {
+  const activeEvaluation = evaluation?.[evaluationSplit] || evaluation?.validation || evaluation?.train;
   return (
     <section className="panel training-panel">
       <h2>Preference training</h2>
@@ -575,6 +617,121 @@ function PreferenceTrainingPanel({options, setOptions, summary, status, busy, on
       <button type="button" className="secondary" onClick={onLoadModel} disabled={busy}>Load saved model</button>
       <p className="muted">{status}</p>
       {!summary.canTrain && <p className="error-text">Needs at least one liked and one unliked embedded track.</p>}
+      <TrainingCurve history={lossHistory} />
+      {activeEvaluation && (
+        <div className="training-evaluation">
+          <div className="training-evaluation-header">
+            <strong>Model errors</strong>
+            <div className="evaluation-toggle">
+              <button type="button" className={evaluationSplit === 'train' ? '' : 'secondary'} onClick={() => setEvaluationSplit('train')}>Train</button>
+              <button type="button" className={evaluationSplit === 'validation' ? '' : 'secondary'} onClick={() => setEvaluationSplit('validation')} disabled={!evaluation?.validation?.count}>Val</button>
+            </div>
+          </div>
+          <div className="training-metrics">
+            <span>Accuracy <b>{formatMetric(activeEvaluation.accuracy)}</b></span>
+            <span>ROC AUC <b>{formatMetric(activeEvaluation.rocAuc)}</b></span>
+            <span>PR AUC <b>{formatMetric(activeEvaluation.prAuc)}</b></span>
+            <span>Count <b>{activeEvaluation.count}</b></span>
+          </div>
+          <div className="mini-confusion" aria-label="Confusion matrix at threshold 0.5">
+            <span>TP <b>{activeEvaluation.confusion.tp}</b></span>
+            <span>FP <b>{activeEvaluation.confusion.fp}</b></span>
+            <span>FN <b>{activeEvaluation.confusion.fn}</b></span>
+            <span>TN <b>{activeEvaluation.confusion.tn}</b></span>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SavedModelPrompt({onLoad, onClose, busy}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="layout-modal saved-model-modal" role="dialog" aria-modal="true" aria-labelledby="saved-model-title">
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">Preference model</p>
+            <h2 id="saved-model-title">Saved model detected</h2>
+            <p>Saved preference model was detected. Would you like to load it now?</p>
+          </div>
+          <button type="button" className="secondary" onClick={onClose}>Not now</button>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="secondary" onClick={onClose}>Dismiss</button>
+          <button type="button" onClick={onLoad} disabled={busy}>{busy ? 'Loading...' : 'Load saved model'}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TrainingCurve({history}) {
+  if (!history?.length) return null;
+  const width = 340;
+  const height = 150;
+  const pad = {top: 12, right: 10, bottom: 24, left: 38};
+  const values = history.flatMap((point) => [point.loss, point.valLoss]).filter((value) => Number.isFinite(value));
+  const minLoss = Math.min(...values, 0);
+  const maxLoss = Math.max(...values, 1);
+  const x = (epoch) => pad.left + ((epoch - 1) / Math.max(1, history.length - 1)) * (width - pad.left - pad.right);
+  const y = (loss) => height - pad.bottom - ((loss - minLoss) / Math.max(0.000001, maxLoss - minLoss)) * (height - pad.top - pad.bottom);
+  const linePath = (key) => history
+    .filter((point) => Number.isFinite(point[key]))
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${x(point.epoch).toFixed(1)} ${y(point[key]).toFixed(1)}`)
+    .join(' ');
+  return (
+    <div className="training-curve">
+      <div className="curve-legend"><span><i className="train" /> train loss</span><span><i className="val" /> val loss</span></div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Training and validation loss curve">
+        <line x1={pad.left} y1={height - pad.bottom} x2={width - pad.right} y2={height - pad.bottom} />
+        <line x1={pad.left} y1={pad.top} x2={pad.left} y2={height - pad.bottom} />
+        <text x="3" y={pad.top + 4}>{maxLoss.toFixed(2)}</text>
+        <text x="3" y={height - pad.bottom}>{minLoss.toFixed(2)}</text>
+        <text x={pad.left} y={height - 5}>1</text>
+        <text x={width - pad.right - 24} y={height - 5}>{history.at(-1)?.epoch}</text>
+        <path className="train-loss" d={linePath('loss')} />
+        <path className="val-loss" d={linePath('valLoss')} />
+      </svg>
+    </div>
+  );
+}
+
+function ArtistFavoritesPanel({artists, onPreference, onSelect}) {
+  const [filter, setFilter] = useState('all');
+  const visibleArtists = artists.filter((artist) => {
+    if (filter === 'liked') return artist.artistPreference === 'up' || artist.predictedUp > artist.predictedDown;
+    if (filter === 'unliked') return artist.artistPreference === 'down' || artist.predictedDown > artist.predictedUp;
+    if (filter === 'manual') return Boolean(artist.artistPreference);
+    return true;
+  });
+  return (
+    <section className="panel artist-favorites-panel">
+      <h2>Artist favorites</h2>
+      <p className="muted">Rank artists by actual and predicted song preferences, then mark artists liked or unliked.</p>
+      <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+        <option value="all">All artists</option>
+        <option value="liked">Likely liked</option>
+        <option value="unliked">Likely unliked</option>
+        <option value="manual">Manually marked</option>
+      </select>
+      <div className="artist-favorites-list">
+        {visibleArtists.map((artist) => (
+          <article className="artist-favorite-row" key={artist.key}>
+            <button type="button" className="artist-title" onClick={() => onSelect(artist.point)}>{artist.name}</button>
+            <div className="artist-score-grid">
+              <span>Actual +{artist.actualUp} / -{artist.actualDown}</span>
+              <span>Pred +{artist.predictedUp} / -{artist.predictedDown}</span>
+              <span>{artist.trackCount} songs</span>
+            </div>
+            <div className="artist-favorite-actions">
+              <button type="button" className={`secondary thumb-button thumb-up ${artist.artistPreference === 'up' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'up')} aria-pressed={artist.artistPreference === 'up'}>👍</button>
+              <button type="button" className={`secondary thumb-button thumb-down ${artist.artistPreference === 'down' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'down')} aria-pressed={artist.artistPreference === 'down'}>👎</button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {!visibleArtists.length && <p className="muted">No artists match this filter.</p>}
     </section>
   );
 }
@@ -586,6 +743,50 @@ function updateLayoutOption(setLayoutOptions, key, value) {
 function isEditingTarget(target) {
   const tagName = target?.tagName?.toLowerCase();
   return target?.isContentEditable || tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+}
+
+function buildArtistSummaries(points, thumbPreferences, predictedPreferences) {
+  const artistPoints = new Map(points.filter((point) => point.kind === 'artist').map((point) => [point.label, point]));
+  const summaries = new Map();
+  for (const point of points) {
+    if (!['track', 'user_track'].includes(point.kind)) continue;
+    const metadata = point.metadata || {};
+    const artistName = metadata.artist_name || metadata.artist;
+    if (!artistName) continue;
+    const artistPoint = artistPoints.get(artistName) || {id: `artist-${slugForKey(artistName)}`, kind: 'artist', label: artistName, metadata: {artist_name: artistName}};
+    const summary = summaries.get(artistName) || {
+      key: artistPoint.id,
+      name: artistName,
+      point: artistPoint,
+      trackCount: 0,
+      actualUp: 0,
+      actualDown: 0,
+      predictedUp: 0,
+      predictedDown: 0,
+      artistPreference: thumbPreferences?.[preferenceKeyForPoint(artistPoint)] || null,
+    };
+    const actual = thumbPreferences?.[preferenceKeyForPoint(point)];
+    const predicted = predictedPreferences?.[preferenceKeyForPoint(point)]?.value;
+    summary.trackCount += 1;
+    if (actual === 'up') summary.actualUp += 1;
+    if (actual === 'down') summary.actualDown += 1;
+    if (!actual && predicted === 'up') summary.predictedUp += 1;
+    if (!actual && predicted === 'down') summary.predictedDown += 1;
+    summaries.set(artistName, summary);
+  }
+  return Array.from(summaries.values()).sort((a, b) => {
+    const aStrength = Math.max(a.actualUp + a.predictedUp, a.actualDown + a.predictedDown);
+    const bStrength = Math.max(b.actualUp + b.predictedUp, b.actualDown + b.predictedDown);
+    return bStrength - aStrength || b.trackCount - a.trackCount || a.name.localeCompare(b.name);
+  });
+}
+
+function slugForKey(value) {
+  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
+}
+
+function formatMetric(value) {
+  return value === null || value === undefined ? 'n/a' : Number(value).toFixed(3);
 }
 
 function selectedVectorId(point) {
