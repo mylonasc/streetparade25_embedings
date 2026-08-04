@@ -141,6 +141,116 @@ def list_artist_tracks(artist_id: int, include_embedding: bool = False) -> list[
         return [track_response(row, include_embedding=include_embedding) for row in rows]
 
 
+def upsert_love_mobile(payload: dict[str, Any], now: Callable[[], str]) -> dict[str, Any]:
+    """Create or update one love-mobile stage by source index.
+
+    Args:
+        payload: Love-mobile fields loaded from the source YAML.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Stored love-mobile row as a dictionary.
+    """
+    timestamp = now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO love_mobiles (
+                uuid, source_index, number, name, title, genres, motto, time, description, image, links, source, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(source_index) DO UPDATE SET
+                uuid = COALESCE(love_mobiles.uuid, excluded.uuid),
+                name = excluded.name,
+                title = excluded.title,
+                number = excluded.number,
+                genres = excluded.genres,
+                motto = excluded.motto,
+                time = excluded.time,
+                description = excluded.description,
+                image = excluded.image,
+                links = excluded.links,
+                source = excluded.source,
+                updated_at = excluded.updated_at
+            """,
+            (
+                uuid4().hex,
+                int(payload["source_index"]),
+                int(payload["number"]),
+                str(payload["name"]),
+                str(payload.get("title") or payload["name"]),
+                payload.get("genres"),
+                payload.get("motto"),
+                payload.get("time"),
+                payload.get("description"),
+                json.dumps(payload.get("image") or {}),
+                json.dumps(payload.get("links") or []),
+                payload.get("source"),
+                timestamp,
+                timestamp,
+            ),
+        )
+        row = conn.execute("SELECT * FROM love_mobiles WHERE source_index = ?", (int(payload["source_index"]),)).fetchone()
+        return row_dict(row)
+
+
+def upsert_artist_love_mobile(
+    artist_id: int,
+    love_mobile_id: int,
+    artist_name: str,
+    artist_bio: str | None,
+    artist_links: list[dict[str, Any]],
+    now: Callable[[], str],
+) -> dict[str, Any]:
+    """Create or update the relation between an artist and a love mobile.
+
+    Args:
+        artist_id: Stored artist primary key.
+        love_mobile_id: Stored love-mobile primary key.
+        artist_name: Artist name as listed on the love-mobile source page.
+        artist_bio: Bio from the love-mobile source page, if present.
+        artist_links: Social/link data from the love-mobile source page.
+        now: Clock function used for timestamps.
+
+    Returns:
+        Stored relation row as a dictionary.
+    """
+    timestamp = now()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO artist_love_mobiles (
+                artist_id, love_mobile_id, artist_name, artist_bio, artist_links, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(artist_id, love_mobile_id) DO UPDATE SET
+                artist_name = excluded.artist_name,
+                artist_bio = COALESCE(excluded.artist_bio, artist_love_mobiles.artist_bio),
+                artist_links = excluded.artist_links,
+                updated_at = excluded.updated_at
+            """,
+            (artist_id, love_mobile_id, artist_name, artist_bio, json.dumps(artist_links), timestamp, timestamp),
+        )
+        row = conn.execute(
+            "SELECT * FROM artist_love_mobiles WHERE artist_id = ? AND love_mobile_id = ?",
+            (artist_id, love_mobile_id),
+        ).fetchone()
+        return row_dict(row)
+
+
+def list_love_mobiles() -> list[dict[str, Any]]:
+    """List love-mobile stages with decoded JSON metadata."""
+    with connect() as conn:
+        rows = conn.execute("SELECT * FROM love_mobiles ORDER BY source_index").fetchall()
+    result = []
+    for row in rows:
+        item = row_dict(row)
+        item["image"] = json.loads(item["image"] or "{}")
+        item["links"] = json.loads(item["links"] or "[]")
+        result.append(item)
+    return result
+
+
 def list_tracks(page: int = 1, page_size: int = 100, include_embedding: bool = False) -> dict[str, Any]:
     """List tracks with pagination metadata.
 

@@ -198,6 +198,7 @@ def init_db() -> None:
         )
         ensure_artist_columns(conn)
         ensure_track_columns(conn)
+        ensure_love_mobile_tables(conn)
         ensure_sample_embedding_table(conn)
         ensure_preference_table(conn)
         ensure_uuid_indexes(conn)
@@ -239,6 +240,113 @@ def ensure_track_columns(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE tracks SET download_status = 'completed' WHERE downloaded = 1")
     if "uuid" not in columns:
         conn.execute("ALTER TABLE tracks ADD COLUMN uuid TEXT")
+
+
+def ensure_love_mobile_tables(conn: sqlite3.Connection) -> None:
+    """Ensure love-mobile stage metadata and artist links exist.
+
+    Args:
+        conn: Open application database connection.
+    """
+    rebuild_love_mobile_table_if_needed(conn)
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS love_mobiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            source_index INTEGER NOT NULL UNIQUE,
+            number INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            title TEXT NOT NULL,
+            genres TEXT,
+            motto TEXT,
+            time TEXT,
+            description TEXT,
+            image TEXT NOT NULL DEFAULT '{}',
+            links TEXT NOT NULL DEFAULT '[]',
+            source TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS artist_love_mobiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            artist_id INTEGER NOT NULL REFERENCES artists(id) ON DELETE CASCADE,
+            love_mobile_id INTEGER NOT NULL REFERENCES love_mobiles(id) ON DELETE CASCADE,
+            artist_name TEXT NOT NULL,
+            artist_bio TEXT,
+            artist_links TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(artist_id, love_mobile_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS artist_love_mobiles_artist_idx
+            ON artist_love_mobiles(artist_id);
+        CREATE INDEX IF NOT EXISTS artist_love_mobiles_love_mobile_idx
+            ON artist_love_mobiles(love_mobile_id);
+        """
+    )
+
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(love_mobiles)")}
+    if "source_index" not in columns:
+        conn.execute("ALTER TABLE love_mobiles ADD COLUMN source_index INTEGER")
+        conn.execute("UPDATE love_mobiles SET source_index = number WHERE source_index IS NULL")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS love_mobiles_source_index_unique ON love_mobiles(source_index)")
+
+
+def rebuild_love_mobile_table_if_needed(conn: sqlite3.Connection) -> None:
+    """Rebuild early love-mobile table variants that made number unique.
+
+    The source YAML currently has duplicate display numbers, so the stable YAML
+    ``index`` must be the unique key instead.
+    """
+    table = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'love_mobiles'").fetchone()
+    if table is None:
+        return
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(love_mobiles)")}
+    table_sql = table["sql"] or ""
+    if "source_index" in columns and "number INTEGER NOT NULL UNIQUE" not in table_sql:
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("DROP TABLE IF EXISTS artist_love_mobiles")
+    conn.execute("ALTER TABLE love_mobiles RENAME TO love_mobiles_old")
+    conn.executescript(
+        """
+        CREATE TABLE love_mobiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            source_index INTEGER NOT NULL UNIQUE,
+            number INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            title TEXT NOT NULL,
+            genres TEXT,
+            motto TEXT,
+            time TEXT,
+            description TEXT,
+            image TEXT NOT NULL DEFAULT '{}',
+            links TEXT NOT NULL DEFAULT '[]',
+            source TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        """
+    )
+    source_expression = "source_index" if "source_index" in columns else "number"
+    conn.execute(
+        f"""
+        INSERT INTO love_mobiles (
+            id, uuid, source_index, number, name, title, genres, motto, time, description,
+            image, links, source, created_at, updated_at
+        )
+        SELECT id, uuid, {source_expression}, number, name, title, genres, motto, time, description,
+               image, links, source, created_at, updated_at
+        FROM love_mobiles_old
+        """
+    )
+    conn.execute("DROP TABLE love_mobiles_old")
+    conn.execute("PRAGMA foreign_keys = ON")
 
 
 def ensure_sample_embedding_table(conn: sqlite3.Connection) -> None:

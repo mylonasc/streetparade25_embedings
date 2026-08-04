@@ -5,6 +5,8 @@ The application stores operational metadata in SQLite and embedding vectors in a
 
 The ``tracks.embedding`` column is retained only for legacy compatibility. New embedding writes store vectors in ChromaDB and store metadata/provenance in ``track_embeddings``. A track can have multiple embedding rows when the backend, model configuration, or sampling strategy changes.
 
+Love-mobile stage metadata is stored in ``love_mobiles`` and connected to artists through ``artist_love_mobiles``. This relationship is many-to-many because an artist can appear on more than one love mobile.
+
 .. uml:: data_model.puml
    :caption: Street Parade embeddings data model
 

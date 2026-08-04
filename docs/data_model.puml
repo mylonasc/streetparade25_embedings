@@ -48,6 +48,39 @@ package "SQLite metadata" {
     UNIQUE(artist_id, url)
   }
 
+  entity "love_mobiles" as love_mobiles {
+    * id : INTEGER <<PK>>
+    --
+    uuid : TEXT <<unique>>
+    source_index : INTEGER <<unique>>
+    number : INTEGER
+    name : TEXT
+    title : TEXT
+    genres : TEXT
+    motto : TEXT
+    time : TEXT
+    description : TEXT
+    image : JSON TEXT
+    links : JSON TEXT
+    source : TEXT
+    created_at : TEXT
+    updated_at : TEXT
+  }
+
+  entity "artist_love_mobiles" as artist_love_mobiles {
+    * id : INTEGER <<PK>>
+    --
+    artist_id : INTEGER <<FK>>
+    love_mobile_id : INTEGER <<FK>>
+    artist_name : TEXT
+    artist_bio : TEXT
+    artist_links : JSON TEXT
+    created_at : TEXT
+    updated_at : TEXT
+    --
+    UNIQUE(artist_id, love_mobile_id)
+  }
+
   entity "track_samples" as track_samples {
     * id : INTEGER <<PK>>
     --
@@ -151,6 +184,8 @@ package "Services" {
 }
 
 artists ||--o{ tracks : owns
+artists ||--o{ artist_love_mobiles : performs on
+love_mobiles ||--o{ artist_love_mobiles : has lineup
 tracks ||--o{ track_samples : sampled into
 artists ||--o{ track_embeddings : has
 tracks ||--o{ track_embeddings : embedded as

@@ -510,6 +510,7 @@ def add_artist_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "metadata": {
                     "artist_name": artist_name,
                     "track_count": len(artist_tracks),
+                    "love_mobiles": (artist_tracks[0].get("metadata") or {}).get("love_mobiles") or [],
                     "tracks": [
                         {
                             "id": track["id"],
@@ -670,7 +671,68 @@ def fetch_latest_embedding_rows(db_file: Path | None = None) -> list[dict[str, A
             ORDER BY artists.name, tracks.id
             """
         ).fetchall()
-    return [row_dict(row) for row in rows]
+        love_mobiles_by_artist = fetch_love_mobiles_by_artist(conn)
+    result = [row_dict(row) for row in rows]
+    for row in result:
+        row["love_mobiles"] = love_mobiles_by_artist.get(int(row["artist_id"]), [])
+    return result
+
+
+def fetch_love_mobiles_by_artist(conn: sqlite3.Connection) -> dict[int, list[dict[str, Any]]]:
+    """Load love-mobile metadata keyed by artist ID when the tables exist."""
+    has_table = conn.execute(
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'artist_love_mobiles'"
+    ).fetchone()["count"]
+    if not has_table:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT
+            alm.artist_id,
+            alm.artist_name,
+            alm.artist_bio,
+            alm.artist_links,
+            lm.id,
+            lm.uuid,
+            lm.source_index,
+            lm.number,
+            lm.name,
+            lm.title,
+            lm.genres,
+            lm.motto,
+            lm.time,
+            lm.description,
+            lm.image,
+            lm.links,
+            lm.source
+        FROM artist_love_mobiles alm
+        JOIN love_mobiles lm ON lm.id = alm.love_mobile_id
+        ORDER BY alm.artist_id, lm.source_index
+        """
+    ).fetchall()
+    result: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        result.setdefault(int(row["artist_id"]), []).append(
+            {
+                "id": row["id"],
+                "uuid": row["uuid"],
+                "source_index": row["source_index"],
+                "number": row["number"],
+                "name": row["name"],
+                "title": row["title"],
+                "genres": row["genres"],
+                "motto": row["motto"],
+                "time": row["time"],
+                "description": row["description"],
+                "image": json_value(row["image"], {}),
+                "links": json_value(row["links"], []),
+                "source": row["source"],
+                "artist_name": row["artist_name"],
+                "artist_bio": row["artist_bio"],
+                "artist_links": json_value(row["artist_links"], []),
+            }
+        )
+    return result
 
 
 def seed_embedding_rows() -> list[dict[str, Any]]:
@@ -794,8 +856,18 @@ def track_point(row: dict[str, Any], x: float, y: float, cluster: int) -> dict[s
             "path": row.get("path"),
             "vector_id": row.get("vector_id"),
             "embedding_model": row.get("embedding_model"),
+            "love_mobiles": row.get("love_mobiles") or [],
         },
     }
+
+
+def json_value(value: str | None, default: Any) -> Any:
+    if not value:
+        return default
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return default
 
 
 def user_point_from_track(

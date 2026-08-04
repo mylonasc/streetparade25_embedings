@@ -120,6 +120,7 @@ def load_track_points(db_path: Path, chroma_dir: Path, model: str | None) -> lis
     vector_store = get_vector_store(persist_dir=chroma_dir)
     with connect(db_path) as conn:
         rows = conn.execute(latest_track_embedding_sql(model is not None), (model,) if model else ()).fetchall()
+        love_mobiles_by_artist = load_love_mobiles_by_artist(conn)
 
     track_points: list[EmbeddingPoint] = []
     for row in rows:
@@ -154,6 +155,7 @@ def load_track_points(db_path: Path, chroma_dir: Path, model: str | None) -> lis
             "artist_instagram": row["instagram"],
             "artist_youtube": row["youtube"],
             "artist_web": row["web"],
+            "love_mobiles": love_mobiles_by_artist.get(int(row["artist_id"]), []),
         }
         metadata["soundcloud_embed_url"] = soundcloud_embed_url(metadata["url"])
         track_points.append(
@@ -227,6 +229,7 @@ def build_artist_points(track_points: list[EmbeddingPoint]) -> list[EmbeddingPoi
                 "instagram": metadata.get("artist_instagram"),
                 "youtube": metadata.get("artist_youtube"),
                 "web": metadata.get("artist_web"),
+                "love_mobiles": metadata.get("love_mobiles") or [],
             },
         )
 
@@ -314,6 +317,62 @@ def json_data(value: str | None, default: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError:
         return default
+
+
+def load_love_mobiles_by_artist(conn: sqlite3.Connection) -> dict[int, list[dict[str, Any]]]:
+    has_table = conn.execute(
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'artist_love_mobiles'"
+    ).fetchone()["count"]
+    if not has_table:
+        return {}
+    rows = conn.execute(
+        """
+        SELECT
+            alm.artist_id,
+            alm.artist_name,
+            alm.artist_bio,
+            alm.artist_links,
+            lm.id,
+            lm.uuid,
+            lm.source_index,
+            lm.number,
+            lm.name,
+            lm.title,
+            lm.genres,
+            lm.motto,
+            lm.time,
+            lm.description,
+            lm.image,
+            lm.links,
+            lm.source
+        FROM artist_love_mobiles alm
+        JOIN love_mobiles lm ON lm.id = alm.love_mobile_id
+        ORDER BY alm.artist_id, lm.source_index
+        """
+    ).fetchall()
+    result: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        result.setdefault(int(row["artist_id"]), []).append(
+            {
+                "id": row["id"],
+                "uuid": row["uuid"],
+                "source_index": row["source_index"],
+                "number": row["number"],
+                "name": row["name"],
+                "title": row["title"],
+                "genres": row["genres"],
+                "motto": row["motto"],
+                "time": row["time"],
+                "description": row["description"],
+                "image": json_data(row["image"], {}),
+                "links": json_data(row["links"], []),
+                "source": row["source"],
+                "artist_name": row["artist_name"],
+                "artist_bio": row["artist_bio"],
+                "artist_links": json_data(row["artist_links"], []),
+            }
+        )
+    return result
 
 
 def title_from_url(url: str | None) -> str | None:
