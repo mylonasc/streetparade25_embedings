@@ -95,7 +95,7 @@ def create_user_router(
 
     @router.post("/layouts/recompute")
     async def recompute_visualization_layout(payload: LayoutRequest) -> dict[str, Any]:
-        return await recompute_visualization_layout_response(payload, layout_service())
+        return await recompute_visualization_layout_response(payload, layout_service(), song_downloads_enabled)
 
     @router.get("/layout-jobs/{job_id}")
     async def get_layout_job(job_id: str) -> dict[str, Any]:
@@ -251,8 +251,13 @@ def _table_fingerprint(conn: Any, table: str, where_column: str | None = None, w
     return [f"{table}:{row['row_count']}:{row['max_time'] or ''}:{row['max_created'] or ''}"]
 
 
-async def recompute_visualization_layout_response(payload: LayoutRequest, service: LayoutServiceProtocol) -> dict[str, Any]:
+async def recompute_visualization_layout_response(
+    payload: LayoutRequest,
+    service: LayoutServiceProtocol,
+    song_downloads_enabled: Callable[[], bool],
+) -> dict[str, Any]:
     """Queue recomputation of visualization coordinates and clusters."""
+    payload = payload.model_copy(update={"username": payload.username if song_downloads_enabled() else None})
     job = await service.enqueue(payload)
     return job.as_dict()
 
