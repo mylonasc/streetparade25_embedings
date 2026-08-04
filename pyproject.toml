@@ -8,25 +8,41 @@ version = "0.1.0"
 description = "SoundCloud download and CLAP embedding pipeline for Street Parade research analysis."
 requires-python = ">=3.10,<3.14"
 dependencies = [
-  "beautifulsoup4",
-  "chromadb",
   "fastapi",
-  "lxml[html-clean]>=6.1.1",
-  "nest-asyncio>=1.6.0",
   "numpy",
-  "pydub",
-  "PyYAML",
-  "requests-html>=0.10.0",
+  "pydantic",
   "scikit-learn>=1.7.2",
-  "soundcloud-lib",
-  "tensorflow[and-gpu]>=2.21.0",
-  "torch",
-  "transformers",
-  "uvicorn[standard]",
-  "yt-dlp",
+  "uvicorn",
 ]
 
 [project.optional-dependencies]
+chroma = [
+  "chromadb",
+]
+embedding = [
+  "beautifulsoup4",
+  "lxml[html-clean]>=6.1.1",
+  "nest-asyncio>=1.6.0",
+  "pydub",
+  "requests-html>=0.10.0",
+  "soundcloud-lib",
+  "torch",
+  "transformers",
+  "yt-dlp",
+]
+full = [
+  "beautifulsoup4",
+  "chromadb",
+  "lxml[html-clean]>=6.1.1",
+  "nest-asyncio>=1.6.0",
+  "pydub",
+  "PyYAML",
+  "requests-html>=0.10.0",
+  "soundcloud-lib",
+  "torch",
+  "transformers",
+  "yt-dlp",
+]
 discovery = [
   "lxml_html_clean",
   "requests-html",

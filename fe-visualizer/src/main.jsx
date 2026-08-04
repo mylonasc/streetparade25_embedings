@@ -9,6 +9,8 @@ import {isMarked, markKey, modelSummary, playlistForPoint, preferenceKeyForPoint
 import {MARKS_KEY, USERNAME_KEY, readMarks} from './storage.js';
 import './styles.css';
 
+const SONG_DOWNLOADS_BUILD_ENABLED = import.meta.env.VITE_ENABLE_SONG_DL_AND_EMBEDINGS !== 'false';
+
 function App() {
   const [username, setUsername] = useState(localStorage.getItem(USERNAME_KEY) || '');
   const [draftUsername, setDraftUsername] = useState(username);
@@ -55,7 +57,7 @@ function App() {
   async function loadAll(activeUsername = username) {
     if (!activeUsername) return;
     const viz = await request(`/visualization?username=${encodeURIComponent(activeUsername)}`);
-    const userSongDownloadsEnabled = Boolean(viz.features?.song_downloads_and_embeddings);
+    const userSongDownloadsEnabled = SONG_DOWNLOADS_BUILD_ENABLED && Boolean(viz.features?.song_downloads_and_embeddings);
     const [tracks, preferences] = await Promise.all([
       userSongDownloadsEnabled ? request(`/users/${encodeURIComponent(activeUsername)}/tracks`) : Promise.resolve([]),
       getUserPreferences(activeUsername),

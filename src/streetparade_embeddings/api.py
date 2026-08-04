@@ -80,60 +80,88 @@ UserTrackAnalysisService = _UserTrackAnalysisService
 LayoutService = _LayoutService
 
 
-embedding_service = LazyClapEmbeddingService()
-download_service = DownloadService()
-
-
-user_track_analysis_service = UserTrackAnalysisService()
+embedding_service: LazyClapEmbeddingService | None = None
+download_service: DownloadService | None = None
+user_track_analysis_service: UserTrackAnalysisService | None = None
 layout_service = LayoutService()
+
+
+def get_embedding_service() -> LazyClapEmbeddingService:
+    """Return the embedding queue service, creating it only when enabled."""
+    _require_song_downloads_and_embeddings()
+    global embedding_service
+    if embedding_service is None:
+        embedding_service = LazyClapEmbeddingService()
+    return embedding_service
+
+
+def get_download_service() -> DownloadService:
+    """Return the download queue service, creating it only when enabled."""
+    _require_song_downloads_and_embeddings()
+    global download_service
+    if download_service is None:
+        download_service = DownloadService()
+    return download_service
+
+
+def get_user_track_analysis_service() -> UserTrackAnalysisService:
+    """Return the user-track analysis service, creating it only when enabled."""
+    _require_song_downloads_and_embeddings()
+    global user_track_analysis_service
+    if user_track_analysis_service is None:
+        user_track_analysis_service = UserTrackAnalysisService()
+    return user_track_analysis_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize storage and background workers for the FastAPI lifespan."""
     init_db()
-    await embedding_service.start()
-    await download_service.start()
     if song_downloads_and_embeddings_enabled():
-        await user_track_analysis_service.start()
+        await get_embedding_service().start()
+        await get_download_service().start()
+        await get_user_track_analysis_service().start()
     await layout_service.start()
     try:
         yield
     finally:
         await layout_service.stop()
-        await user_track_analysis_service.stop()
-        await download_service.stop()
-        await embedding_service.stop()
+        if user_track_analysis_service is not None:
+            await user_track_analysis_service.stop()
+        if download_service is not None:
+            await download_service.stop()
+        if embedding_service is not None:
+            await embedding_service.stop()
 
 
 app = create_app(lifespan=lifespan)
-app.include_router(create_job_router(lambda: download_service, lambda: embedding_service))
-app.include_router(create_user_router(lambda: user_track_analysis_service, lambda: layout_service, song_downloads_and_embeddings_enabled))
+app.include_router(create_job_router(get_download_service, get_embedding_service))
+app.include_router(create_user_router(get_user_track_analysis_service, lambda: layout_service, song_downloads_and_embeddings_enabled))
 
 
 async def download_artist_tracks(artist_id: int, payload: DownloadRequest) -> dict[str, Any]:
     """Queue discovery, download, and sampling for one artist's tracks."""
-    return await _queue_artist_download(artist_id, payload, download_service)
+    return await _queue_artist_download(artist_id, payload, get_download_service())
 
 
 async def list_download_jobs() -> list[dict[str, Any]]:
     """List queued, running, and completed download jobs."""
-    return _list_download_job_responses(download_service)
+    return _list_download_job_responses(get_download_service())
 
 
 async def get_download_job(job_id: str) -> dict[str, Any]:
     """Return one download job by ID."""
-    return _get_download_job_response(job_id, download_service)
+    return _get_download_job_response(job_id, get_download_service())
 
 
 async def cancel_download_job(job_id: str) -> dict[str, Any]:
     """Request cancellation for a download job."""
-    return _cancel_download_job_response(job_id, download_service)
+    return _cancel_download_job_response(job_id, get_download_service())
 
 
 async def compute_embeddings(payload: ComputeRequest) -> dict[str, Any]:
     """Queue embedding computation for tracks matching a request."""
-    return await _queue_embedding_compute(payload, embedding_service)
+    return await _queue_embedding_compute(payload, get_embedding_service())
 
 
 async def compute_artist_track_embeddings(artist_id: int, payload: ComputeRequest) -> dict[str, Any]:
@@ -144,17 +172,17 @@ async def compute_artist_track_embeddings(artist_id: int, payload: ComputeReques
 
 async def list_embedding_jobs() -> list[dict[str, Any]]:
     """List queued, running, and completed embedding jobs."""
-    return _list_embedding_job_responses(embedding_service)
+    return _list_embedding_job_responses(get_embedding_service())
 
 
 async def get_embedding_job(job_id: str) -> dict[str, Any]:
     """Return one embedding job by ID."""
-    return _get_embedding_job_response(job_id, embedding_service)
+    return _get_embedding_job_response(job_id, get_embedding_service())
 
 
 async def cancel_embedding_job(job_id: str) -> dict[str, Any]:
     """Request cancellation for an embedding job."""
-    return _cancel_embedding_job_response(job_id, embedding_service)
+    return _cancel_embedding_job_response(job_id, get_embedding_service())
 
 
 async def create_user(payload: dict[str, Any]) -> dict[str, Any]:
@@ -169,7 +197,7 @@ async def get_user_profile(username: str) -> dict[str, Any]:
 
 async def submit_user_track(username: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Queue download and embedding analysis for a user-submitted track."""
-    return await _submit_user_track_response(username, payload, user_track_analysis_service, song_downloads_and_embeddings_enabled)
+    return await _submit_user_track_response(username, payload, get_user_track_analysis_service(), song_downloads_and_embeddings_enabled)
 
 
 async def list_user_owned_tracks(username: str) -> list[dict[str, Any]]:
@@ -194,7 +222,7 @@ async def get_user_track_audio(username: str, user_track_id: int) -> FileRespons
 
 async def get_user_track_job(job_id: str) -> dict[str, Any]:
     """Return one user-track analysis job by ID."""
-    return _get_user_track_job_response(job_id, user_track_analysis_service, song_downloads_and_embeddings_enabled)
+    return _get_user_track_job_response(job_id, get_user_track_analysis_service(), song_downloads_and_embeddings_enabled)
 
 
 async def get_visualization(username: str | None = None) -> dict[str, Any]:

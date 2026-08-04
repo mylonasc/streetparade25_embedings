@@ -3,13 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        API_PROFILE: minimal
     environment:
+      ENABLE_SONG_DL_AND_EMBEDINGS: "0"
       STREETPARADE_DB: /data/streetparade_embeddings.sqlite3
+      STREETPARADE_VECTOR_STORE: numpy
+      STREETPARADE_NUMPY_VECTOR_DIR: /data/vectorstore
       STREETPARADE_CHROMA_DIR: /app/chroma
       STREETPARADE_CORS_ORIGINS: ""
       STREETPARADE_CORS_ORIGIN_REGEX: "https?://.*"
     volumes:
       - ./data:/data
+      - ./vectorstore:/data/vectorstore
       - ./chroma:/app/chroma
       - ./.songs_cache:/app/.songs_cache
       - ./hf-cache:/root/.cache/huggingface
@@ -22,6 +28,7 @@ services:
       args:
         VITE_API_BASE_URL: /streetparade26/api
         VITE_BASE_PATH: /streetparade26/
+        VITE_ENABLE_SONG_DL_AND_EMBEDINGS: "false"
     ports:
       - "8080:80"
     depends_on:
