@@ -232,7 +232,7 @@ async def get_visualization(username: str | None = None) -> dict[str, Any]:
 
 async def recompute_visualization_layout(payload: LayoutRequest) -> dict[str, Any]:
     """Queue recomputation of visualization coordinates and clusters."""
-    return await _recompute_visualization_layout_response(payload, layout_service)
+    return await _recompute_visualization_layout_response(payload, layout_service, song_downloads_and_embeddings_enabled)
 
 
 async def get_layout_job(job_id: str) -> dict[str, Any]:

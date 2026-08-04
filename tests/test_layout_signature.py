@@ -1,7 +1,9 @@
+import asyncio
 import sqlite3
 
 from streetparade_embeddings.db import connect, db_path, init_db
-from streetparade_embeddings.routes.users import _table_fingerprint, visualization_signature
+from streetparade_embeddings.routes.users import _table_fingerprint, recompute_visualization_layout_response, visualization_signature
+from streetparade_embeddings.schemas import LayoutRequest
 
 
 def _insert_completed_layout(conn, job_id: str) -> None:
@@ -54,3 +56,49 @@ def test_visualization_signature_reflects_latest_layout(monkeypatch, tmp_path):
 
     assert first != second
     assert db_path().exists()
+
+
+class _FakeLayoutJob:
+    def __init__(self, request):
+        self.request = request
+
+    def as_dict(self) -> dict:
+        return {"status": "queued", "request": self.request.model_dump(mode="json")}
+
+
+class _FakeLayoutService:
+    def __init__(self):
+        self.enqueued: LayoutRequest | None = None
+
+    async def enqueue(self, request: LayoutRequest):
+        self.enqueued = request
+        return _FakeLayoutJob(request)
+
+    def get_job(self, job_id: str):
+        return None
+
+
+def _enqueue_with(payload: LayoutRequest, enabled: bool):
+    service = _FakeLayoutService()
+
+    async def run():
+        return await recompute_visualization_layout_response(payload, service, lambda: enabled)
+
+    return asyncio.run(run()), service
+
+
+def test_recompute_strips_username_when_song_downloads_disabled():
+    result, service = _enqueue_with(LayoutRequest(username="listener", cluster_count=5), enabled=False)
+
+    assert result["status"] == "queued"
+    assert service.enqueued is not None
+    assert service.enqueued.username is None
+    assert service.enqueued.cluster_count == 5
+
+
+def test_recompute_keeps_username_when_song_downloads_enabled():
+    result, service = _enqueue_with(LayoutRequest(username="listener", cluster_count=5), enabled=True)
+
+    assert result["status"] == "queued"
+    assert service.enqueued is not None
+    assert service.enqueued.username == "listener"
