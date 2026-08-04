@@ -20,6 +20,7 @@ jobs:
   publish-minimal-images:
     name: Publish Minimal Images
     runs-on: ubuntu-latest
+    environment: dockerhub-push
     steps:
       - name: Checkout
         uses: actions/checkout@v4
