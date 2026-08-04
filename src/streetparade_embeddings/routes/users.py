@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -7,7 +8,7 @@ from typing import Any, Protocol
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from ..db import init_db
+from ..db import connect, db_path, init_db
 from ..preferences import current_preferences, set_preference
 from ..runtime import now
 from ..schemas import LayoutRequest, PreferenceRequest
@@ -19,6 +20,7 @@ from ..user_visualization import get_user
 from ..user_visualization import get_user_track_for_username
 from ..user_visualization import latest_layout_points
 from ..user_visualization import list_user_tracks
+from ..vectorstore import IDS_FILE, METADATA_FILE, VECTORS_FILE, default_chroma_dir, default_numpy_store_dir, default_vector_store_backend
 from ..user_visualization import visualization_points
 
 
@@ -86,6 +88,10 @@ def create_user_router(
     @router.get("/visualization")
     async def get_visualization(username: str | None = None) -> dict[str, Any]:
         return get_visualization_response(username, song_downloads_enabled)
+
+    @router.get("/visualization/status")
+    async def get_visualization_status(username: str | None = None) -> dict[str, Any]:
+        return get_visualization_status_response(username, song_downloads_enabled)
 
     @router.post("/layouts/recompute")
     async def recompute_visualization_layout(payload: LayoutRequest) -> dict[str, Any]:
@@ -184,6 +190,7 @@ def get_visualization_response(username: str | None, song_downloads_enabled: Cal
     return {
         "username": username,
         "features": {"song_downloads_and_embeddings": user_song_downloads_enabled},
+        "signature": visualization_signature(username if user_song_downloads_enabled else None, user_song_downloads_enabled),
         "points": points,
         "point_count": len(points),
         "base_point_count": sum(1 for point in points if point.get("kind") == "track"),
@@ -191,6 +198,57 @@ def get_visualization_response(username: str | None, song_downloads_enabled: Cal
         "user_point_count": sum(1 for point in points if point.get("kind") == "user_track"),
         "has_cached_layout": latest_layout_points(username) is not None,
     }
+
+
+def get_visualization_status_response(username: str | None, song_downloads_enabled: Callable[[], bool]) -> dict[str, Any]:
+    """Return a cheap signature for deciding whether the full visualization changed."""
+    user_song_downloads_enabled = song_downloads_enabled()
+    normalized_username = username if user_song_downloads_enabled else None
+    return {
+        "username": username,
+        "features": {"song_downloads_and_embeddings": user_song_downloads_enabled},
+        "signature": visualization_signature(normalized_username, user_song_downloads_enabled),
+    }
+
+
+def visualization_signature(username: str | None, user_song_downloads_enabled: bool) -> str:
+    """Build a stable signature from map inputs without computing the full projection."""
+    init_db()
+    parts = [f"features:{int(user_song_downloads_enabled)}", f"backend:{default_vector_store_backend()}"]
+    parts.extend(_path_fingerprint(db_path()))
+    if default_vector_store_backend() == "numpy":
+        store_dir = default_numpy_store_dir()
+        for filename in (IDS_FILE, METADATA_FILE, VECTORS_FILE):
+            parts.extend(_path_fingerprint(store_dir / filename))
+    else:
+        parts.extend(_path_fingerprint(default_chroma_dir()))
+    with connect() as conn:
+        for table in ("artists", "tracks", "track_embeddings"):
+            parts.extend(_table_fingerprint(conn, table))
+        parts.extend(_table_fingerprint(conn, "embedding_layouts", time_column="finished_at"))
+        if username:
+            parts.extend(_table_fingerprint(conn, "user_tracks", "username", username))
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+
+
+def _path_fingerprint(path: Path) -> list[str]:
+    if not path.exists():
+        return [f"{path}:missing"]
+    stat = path.stat()
+    return [f"{path}:{int(stat.st_mtime_ns)}:{stat.st_size}"]
+
+
+def _table_fingerprint(conn: Any, table: str, where_column: str | None = None, where_value: str | None = None, time_column: str = "updated_at") -> list[str]:
+    where_sql = f" WHERE {where_column} = ?" if where_column else ""
+    params = (where_value,) if where_column else ()
+    try:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS row_count, MAX({time_column}) AS max_time, MAX(created_at) AS max_created FROM {table}{where_sql}",
+            params,
+        ).fetchone()
+    except Exception:
+        return [f"{table}:unavailable"]
+    return [f"{table}:{row['row_count']}:{row['max_time'] or ''}:{row['max_created'] or ''}"]
 
 
 async def recompute_visualization_layout_response(payload: LayoutRequest, service: LayoutServiceProtocol) -> dict[str, Any]:

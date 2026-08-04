@@ -4,6 +4,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: {{ include "sp26-emb.dataClaimName" . }}
   namespace: {{ include "sp26-emb.namespace" . }}
+  {{- if .Values.persistence.keep }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
   labels:
     {{- include "sp26-emb.labels" . | nindent 4 }}
 spec:

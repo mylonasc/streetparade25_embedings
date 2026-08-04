@@ -1,9 +1,9 @@
 namespace:
-  create: true
-  name: sp26-emb
+  create: false
+  name: sp26-dev
 
 image:
-  repository: your-dockerhub-user/your-single-repo
+  repository: mylonasc/magarathea
   pullPolicy: IfNotPresent
   pullSecrets: []
 
@@ -64,6 +64,7 @@ visualizer:
 persistence:
   enabled: true
   existingClaim: ""
+  keep: true
   storageClassName: ""
   accessModes:
     - ReadWriteOnce

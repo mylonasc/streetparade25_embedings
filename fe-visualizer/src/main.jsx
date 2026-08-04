@@ -10,6 +10,38 @@ import {MARKS_KEY, USERNAME_KEY, readMarks} from './storage.js';
 import './styles.css';
 
 const SONG_DOWNLOADS_BUILD_ENABLED = import.meta.env.VITE_ENABLE_SONG_DL_AND_EMBEDINGS !== 'false';
+const VISUALIZATION_CACHE_VERSION = 1;
+const EMPTY_STATS = {point_count: 0, base_point_count: 0, artist_point_count: 0, user_point_count: 0};
+
+function visualizationCacheKey(username) {
+  return `streetparade-visualization-v${VISUALIZATION_CACHE_VERSION}:${username || 'anonymous'}`;
+}
+
+function readVisualizationCache(username) {
+  try {
+    const raw = localStorage.getItem(visualizationCacheKey(username));
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (cached?.version !== VISUALIZATION_CACHE_VERSION || !cached.payload || !Array.isArray(cached.payload.points)) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function writeVisualizationCache(username, signature, payload) {
+  if (!signature || !payload?.points) return;
+  try {
+    localStorage.setItem(visualizationCacheKey(username), JSON.stringify({
+      version: VISUALIZATION_CACHE_VERSION,
+      signature,
+      cachedAt: Date.now(),
+      payload,
+    }));
+  } catch {
+    // Browser storage can be full or disabled; the live map still works without caching.
+  }
+}
 
 function App() {
   const [username, setUsername] = useState(localStorage.getItem(USERNAME_KEY) || '');
@@ -27,7 +59,7 @@ function App() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [shareUrl, setShareUrl] = useState('');
-  const [stats, setStats] = useState({point_count: 0, base_point_count: 0, artist_point_count: 0, user_point_count: 0});
+  const [stats, setStats] = useState(EMPTY_STATS);
   const [songDownloadsEnabled, setSongDownloadsEnabled] = useState(true);
   const [layoutOptions, setLayoutOptions] = useState(DEFAULT_LAYOUT_OPTIONS);
   const [showLayoutModal, setShowLayoutModal] = useState(false);
@@ -53,16 +85,37 @@ function App() {
   const [preferenceEvaluationSplit, setPreferenceEvaluationSplit] = useState('validation');
   const [predictedPreferences, setPredictedPreferences] = useState({});
   const [colorByPredictedPreference, setColorByPredictedPreference] = useState(false);
+  const [visualizationLoading, setVisualizationLoading] = useState(false);
 
   async function loadAll(activeUsername = username) {
     if (!activeUsername) return;
-    const viz = await request(`/visualization?username=${encodeURIComponent(activeUsername)}`);
-    const userSongDownloadsEnabled = SONG_DOWNLOADS_BUILD_ENABLED && Boolean(viz.features?.song_downloads_and_embeddings);
-    const [tracks, preferences] = await Promise.all([
-      userSongDownloadsEnabled ? request(`/users/${encodeURIComponent(activeUsername)}/tracks`) : Promise.resolve([]),
-      getUserPreferences(activeUsername),
-    ]);
-    setSongDownloadsEnabled(userSongDownloadsEnabled);
+    const cached = readVisualizationCache(activeUsername);
+    if (cached?.payload) applyVisualizationPayload(cached.payload);
+    setVisualizationLoading(!cached?.payload);
+    try {
+      const status = await request(`/visualization/status?username=${encodeURIComponent(activeUsername)}`);
+      let payload = cached?.payload || null;
+      if (!cached || cached.signature !== status.signature) {
+        setVisualizationLoading(true);
+        payload = await request(`/visualization?username=${encodeURIComponent(activeUsername)}`);
+        writeVisualizationCache(activeUsername, status.signature || payload.signature, payload);
+        applyVisualizationPayload(payload);
+      }
+      const userSongDownloadsEnabled = SONG_DOWNLOADS_BUILD_ENABLED && Boolean((payload || status).features?.song_downloads_and_embeddings);
+      const [tracks, preferences] = await Promise.all([
+        userSongDownloadsEnabled ? request(`/users/${encodeURIComponent(activeUsername)}/tracks`) : Promise.resolve([]),
+        getUserPreferences(activeUsername),
+      ]);
+      setSongDownloadsEnabled(userSongDownloadsEnabled);
+      setUserTracks(tracks || []);
+      setThumbPreferences(preferences || {});
+    } finally {
+      setVisualizationLoading(false);
+    }
+  }
+
+  function applyVisualizationPayload(viz) {
+    setSongDownloadsEnabled(SONG_DOWNLOADS_BUILD_ENABLED && Boolean(viz.features?.song_downloads_and_embeddings));
     setPoints(viz.points || []);
     setStats({
       point_count: viz.point_count || 0,
@@ -70,8 +123,6 @@ function App() {
       artist_point_count: viz.artist_point_count || 0,
       user_point_count: viz.user_point_count || 0,
     });
-    setUserTracks(tracks || []);
-    setThumbPreferences(preferences || {});
   }
 
   async function saveUsername(event) {
@@ -509,17 +560,12 @@ function App() {
               <button type="button" className={`secondary toggle-button ${showArtists ? 'active' : ''}`} onClick={() => setShowArtists((value) => !value)}>Artists</button>
               <button type="button" className="secondary icon-button" aria-label="Help" onClick={() => setShowHelp(true)}>?</button>
             </div>
-            {!songDownloadsEnabled && (
-              <div className="empty-warning feature-warning">
-                Song downloads and user-track embeddings are disabled on this deployment.
-              </div>
-            )}
-            {stats.base_point_count === 0 && (
+            {!visualizationLoading && stats.base_point_count === 0 && (
               <div className="empty-warning">
                 No Street Parade vectors loaded. Check that the API can access the Chroma vector store, especially `./chroma` when using Docker.
               </div>
             )}
-            <Visualizer points={points} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} predictedPreferences={predictedPreferences} colorByPreference={colorByPreference} colorByPredictedPreference={colorByPredictedPreference} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onCanvasClick={() => setSelectionMinimized(true)} onSelectArtist={selectArtistForSong} onPlayArtistSong={selectRandomArtistSong} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
+            <Visualizer points={points} loading={visualizationLoading} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} predictedPreferences={predictedPreferences} colorByPreference={colorByPreference} colorByPredictedPreference={colorByPredictedPreference} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onCanvasClick={() => setSelectionMinimized(true)} onSelectArtist={selectArtistForSong} onPlayArtistSong={selectRandomArtistSong} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
           </section>
 
           <section className={`panel selection-panel ${(selected || playbackPoint) ? 'has-selection' : ''} ${selectionMinimized ? 'is-minimized' : ''}`} aria-live="polite">
@@ -1102,7 +1148,41 @@ function UsernameGate({draftUsername, setDraftUsername, saveUsername, error}) {
   );
 }
 
-function Visualizer({points, selected, setSelected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong}) {
+function drawLoadingMap(context, width, height, timestamp) {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = Math.min(width, height) * 0.14;
+  const phase = timestamp / 840;
+  context.save();
+  context.lineWidth = 1.3;
+  for (let ring = 0; ring < 3; ring += 1) {
+    context.beginPath();
+    context.arc(centerX, centerY, radius + ring * 23, 0, Math.PI * 2);
+    context.strokeStyle = `rgba(133, 245, 196, ${0.15 - ring * 0.035})`;
+    context.stroke();
+  }
+  for (let idx = 0; idx < 22; idx += 1) {
+    const angle = phase + idx * (Math.PI * 2 / 22);
+    const orbit = radius + Math.sin(phase * 1.6 + idx * 0.9) * 18;
+    const x = centerX + Math.cos(angle) * orbit;
+    const y = centerY + Math.sin(angle) * orbit * 0.62;
+    const pulse = (Math.sin(phase * 2.2 + idx * 0.65) + 1) / 2;
+    context.beginPath();
+    context.arc(x, y, 2.4 + pulse * 3.6, 0, Math.PI * 2);
+    context.fillStyle = `rgba(133, 245, 196, ${0.24 + pulse * 0.58})`;
+    context.fill();
+  }
+  context.fillStyle = '#eff6ff';
+  context.font = '800 16px Inter, system-ui, sans-serif';
+  context.textAlign = 'center';
+  context.fillText('Loading embeddings', centerX, centerY + radius + 68);
+  context.fillStyle = 'rgba(239, 246, 255, 0.56)';
+  context.font = '700 12px Inter, system-ui, sans-serif';
+  context.fillText('Preparing the map', centerX, centerY + radius + 90);
+  context.restore();
+}
+
+function Visualizer({points, loading, selected, setSelected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong}) {
   const ref = useRef(null);
   const tooltipRef = useRef(null);
   const transformRef = useRef(d3.zoomIdentity);
@@ -1132,8 +1212,25 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, pre
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     if (!points.length) {
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      return;
+      let loadingFrame = null;
+
+      function drawEmpty(timestamp = 0) {
+        context.save();
+        context.scale(pixelRatio, pixelRatio);
+        context.clearRect(0, 0, width, height);
+        context.fillStyle = 'rgba(255, 255, 255, 0.035)';
+        roundedRect(context, 0, 0, width, height, 24);
+        context.fill();
+        if (loading) drawLoadingMap(context, width, height, timestamp);
+        context.restore();
+        if (loading) loadingFrame = requestAnimationFrame(drawEmpty);
+      }
+
+      canvas.style.cursor = loading ? 'progress' : 'default';
+      drawEmpty();
+      return () => {
+        if (loadingFrame !== null) cancelAnimationFrame(loadingFrame);
+      };
     }
     const x = d3.scaleLinear().domain(d3.extent(points, (point) => point.x)).nice().range([36, width - 36]);
     const y = d3.scaleLinear().domain(d3.extent(points, (point) => point.y)).nice().range([height - 36, 36]);
@@ -1406,7 +1503,7 @@ function Visualizer({points, selected, setSelected, marks, thumbPreferences, pre
       tooltipRef.current?.removeEventListener('mouseleave', handleTooltipLeave);
       selection.on('.zoom', null);
     };
-  }, [points, selected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong, sizeVersion]);
+  }, [points, loading, selected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong, sizeVersion]);
 
   return <><canvas ref={ref} className="plot" /><div ref={tooltipRef} className="tooltip" hidden /></>;
 }

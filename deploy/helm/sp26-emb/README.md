@@ -109,7 +109,7 @@ Render first, without applying:
 ```bash
 helm template sp26-emb ./deploy/helm/sp26-emb \
   --namespace sp26-emb \
-  -f sp26-values.yaml
+  -f deploy/helm/sp26-emb/values.yaml
 ```
 
 Install or upgrade.
@@ -118,9 +118,8 @@ For a first install where the PVC still needs data, start with the app pods scal
 
 ```bash
 helm upgrade --install sp26-emb ./deploy/helm/sp26-emb \
-  --namespace sp26-emb \
-  --create-namespace \
-  -f sp26-values.yaml \
+  --namespace sp26-dev \
+  -f deploy/helm/sp26-emb/values.yaml \
   --set api.replicaCount=0 \
   --set visualizer.replicaCount=0
 ```
@@ -129,9 +128,8 @@ After loading data into the PVC, scale back to normal:
 
 ```bash
 helm upgrade --install sp26-emb ./deploy/helm/sp26-emb \
-  --namespace sp26-emb \
-  --create-namespace \
-  -f sp26-values.yaml
+  --namespace sp26-dev \
+  -f deploy/helm/sp26-emb/values.yaml
 ```
 
 ## Load Data Into The PVC
@@ -169,8 +167,12 @@ kubectl run sp26-data-loader -n sp26-emb \
 Copy files:
 
 ```bash
-kubectl cp streetparade_embeddings.sqlite3 sp26-emb/sp26-data-loader:/data/streetparade_embeddings.sqlite3
-kubectl cp vectorstore sp26-emb/sp26-data-loader:/data/vectorstore
+
+# User data in sqlite:
+kubectl cp streetparade_embeddings.sqlite3 -n sp26-dev sp26-data-loader:/data/streetparade_embeddings.sqlite3
+
+# 2. The numpy vectorstore data:
+kubectl cp vectorstore -n sp26-dev sp26-data-loader:/data/vectorstore
 ```
 
 Clean up:
@@ -178,7 +180,7 @@ Clean up:
 ```bash
 kubectl delete pod sp26-data-loader -n sp26-emb
 helm upgrade --install sp26-emb ./deploy/helm/sp26-emb \
-  --namespace sp26-emb \
+  --namespace sp26-dev \
   -f sp26-values.yaml
 ```
 
@@ -212,16 +214,16 @@ If your cluster only supports Ingress on ports `80`/`443`, rebuild and publish t
 ## Useful Checks
 
 ```bash
-kubectl get all,pvc -n sp26-emb
-kubectl logs -n sp26-emb deploy/sp26-emb-api
-kubectl logs -n sp26-emb deploy/sp26-emb-visualizer -c visualizer
-kubectl logs -n sp26-emb deploy/sp26-emb-visualizer -c api-proxy
+kubectl get all,pvc -n sp26-dev
+kubectl logs -n sp26-dev deploy/sp26-emb-api
+kubectl logs -n sp26-dev deploy/sp26-emb-visualizer -c visualizer
+kubectl logs -n sp26-dev deploy/sp26-emb-visualizer -c api-proxy
 ```
 
 Port-forward for local testing:
 
 ```bash
-kubectl port-forward -n sp26-emb svc/sp26-emb-visualizer 8080:80 8000:8000
+kubectl port-forward -n sp26-dev svc/sp26-emb-visualizer 8080:80 8000:8000
 ```
 
 Then open:
