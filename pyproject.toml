@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "streetparade-embeddings"
-version = "0.1.0"
+version = "0.1.2"
 description = "SoundCloud download and CLAP embedding pipeline for Street Parade research analysis."
 requires-python = ">=3.10,<3.14"
 dependencies = [
