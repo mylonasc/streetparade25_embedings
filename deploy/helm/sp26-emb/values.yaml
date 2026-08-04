@@ -1,0 +1,81 @@
+namespace:
+  create: true
+  name: sp26-emb
+
+image:
+  repository: your-dockerhub-user/your-single-repo
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+api:
+  replicaCount: 1
+  image:
+    tag: api-minimal-0.1.0
+  service:
+    type: ClusterIP
+    port: 8000
+  env:
+    STREETPARADE_DB: /data/streetparade_embeddings.sqlite3
+    STREETPARADE_VECTOR_STORE: numpy
+    STREETPARADE_NUMPY_VECTOR_DIR: /data/vectorstore
+    ENABLE_SONG_DL_AND_EMBEDINGS: "0"
+    STREETPARADE_CORS_ORIGINS: ""
+    STREETPARADE_CORS_ORIGIN_REGEX: "https?://.*"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+visualizer:
+  replicaCount: 1
+  image:
+    tag: visualizer-minimal-0.1.0
+  service:
+    type: LoadBalancer
+    webPort: 80
+    apiProxyPort: 8000
+    annotations: {}
+  apiProxy:
+    enabled: true
+    image: nginx:1.27-alpine
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 2Gi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: sp26.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

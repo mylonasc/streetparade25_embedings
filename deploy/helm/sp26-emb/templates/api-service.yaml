@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sp26-emb.fullname" . }}-api
+  namespace: {{ include "sp26-emb.namespace" . }}
+  labels:
+    {{- include "sp26-emb.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.api.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "sp26-emb.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api

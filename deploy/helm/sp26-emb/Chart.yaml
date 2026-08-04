@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sp26-emb
+description: Minimal Street Parade 26 embedding visualizer deployment.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
