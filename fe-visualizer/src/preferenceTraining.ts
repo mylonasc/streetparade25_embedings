@@ -1,4 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
+import {safeGetItem, safeSetItem} from './storage.js';
 
 export type PreferenceValue = 'up' | 'down';
 
@@ -164,7 +165,7 @@ export async function predictTrackPreferences(trained: TrainedPreferenceModel, t
 
 export async function savePreferenceModel(trained: TrainedPreferenceModel) {
   await trained.model.save(MODEL_URL);
-  localStorage.setItem(MODEL_META_KEY, JSON.stringify({
+  safeSetItem(MODEL_META_KEY, JSON.stringify({
     normalizer: trained.normalizer,
     dimension: trained.dimension,
     trainedAt: trained.trainedAt,
@@ -175,7 +176,7 @@ export async function savePreferenceModel(trained: TrainedPreferenceModel) {
 }
 
 export async function loadPreferenceModel(): Promise<TrainedPreferenceModel | null> {
-  const raw = localStorage.getItem(MODEL_META_KEY);
+  const raw = safeGetItem(MODEL_META_KEY);
   if (!raw) return null;
   const metadata = JSON.parse(raw);
   const model = await tf.loadLayersModel(MODEL_URL);
@@ -183,7 +184,7 @@ export async function loadPreferenceModel(): Promise<TrainedPreferenceModel | nu
 }
 
 export function hasSavedPreferenceModel() {
-  return Boolean(localStorage.getItem(MODEL_META_KEY));
+  return Boolean(safeGetItem(MODEL_META_KEY));
 }
 
 function createModel(dimension: number, options: TrainingOptions) {

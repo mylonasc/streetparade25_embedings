@@ -6,7 +6,7 @@ import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalNumber} from './layoutOpt
 import {DEFAULT_TRAINING_OPTIONS, buildPreferenceDataset, hasSavedPreferenceModel, loadPreferenceModel, predictTrackPreferences, savePreferenceModel, summarizeExamples, trainPreferenceModel} from './preferenceTraining.ts';
 import {buildSearchIndex, searchResults} from './search.js';
 import {isMarked, markKey, modelSummary, playlistForPoint, preferenceKeyForPoint, preferenceTarget, visibleMetadataEntries} from './selection.js';
-import {MARKS_KEY, USERNAME_KEY, readMarks} from './storage.js';
+import {MARKS_KEY, USERNAME_KEY, readMarks, safeGetItem, safeSetItem} from './storage.js';
 import './styles.css';
 
 const SONG_DOWNLOADS_BUILD_ENABLED = import.meta.env.VITE_ENABLE_SONG_DL_AND_EMBEDINGS !== 'false';
@@ -19,7 +19,7 @@ function visualizationCacheKey(username) {
 
 function readVisualizationCache(username) {
   try {
-    const raw = localStorage.getItem(visualizationCacheKey(username));
+    const raw = safeGetItem(visualizationCacheKey(username));
     if (!raw) return null;
     const cached = JSON.parse(raw);
     if (cached?.version !== VISUALIZATION_CACHE_VERSION || !cached.payload || !Array.isArray(cached.payload.points)) return null;
@@ -32,7 +32,7 @@ function readVisualizationCache(username) {
 function writeVisualizationCache(username, signature, payload) {
   if (!signature || !payload?.points) return;
   try {
-    localStorage.setItem(visualizationCacheKey(username), JSON.stringify({
+    safeSetItem(visualizationCacheKey(username), JSON.stringify({
       version: VISUALIZATION_CACHE_VERSION,
       signature,
       cachedAt: Date.now(),
@@ -44,7 +44,7 @@ function writeVisualizationCache(username, signature, payload) {
 }
 
 function App() {
-  const [username, setUsername] = useState(localStorage.getItem(USERNAME_KEY) || '');
+  const [username, setUsername] = useState(safeGetItem(USERNAME_KEY) || '');
   const [draftUsername, setDraftUsername] = useState(username);
   const [points, setPoints] = useState([]);
   const [userTracks, setUserTracks] = useState([]);
@@ -130,7 +130,7 @@ function App() {
     setError('');
     try {
       const user = await request('/users', {method: 'POST', body: JSON.stringify({username: draftUsername})});
-      localStorage.setItem(USERNAME_KEY, user.username);
+      safeSetItem(USERNAME_KEY, user.username);
       setUsername(user.username);
       await loadAll(user.username);
     } catch (err) {
@@ -185,7 +185,7 @@ function App() {
     const next = new Set(marks);
     if (next.has(key)) next.delete(key);
     else next.add(key);
-    localStorage.setItem(MARKS_KEY, JSON.stringify(Array.from(next)));
+    safeSetItem(MARKS_KEY, JSON.stringify(Array.from(next)));
     setMarks(next);
   }
 
@@ -338,13 +338,13 @@ function App() {
     request(`/shares/${token}`).then((share) => {
       const payload = share.payload || {};
       if (payload.username) {
-        localStorage.setItem(USERNAME_KEY, payload.username);
+        safeSetItem(USERNAME_KEY, payload.username);
         setUsername(payload.username);
         setDraftUsername(payload.username);
       }
       if (Array.isArray(payload.marked)) {
         const next = new Set(payload.marked);
-        localStorage.setItem(MARKS_KEY, JSON.stringify(Array.from(next)));
+        safeSetItem(MARKS_KEY, JSON.stringify(Array.from(next)));
         setMarks(next);
       }
     }).catch((err) => setError(err.message));

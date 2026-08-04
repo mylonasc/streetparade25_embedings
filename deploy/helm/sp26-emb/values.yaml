@@ -10,7 +10,7 @@ image:
 api:
   replicaCount: 1
   image:
-    tag: api-minimal-0.1.0
+    tag: api-minimal-0.1.2
   service:
     type: ClusterIP
     port: 8000
@@ -35,7 +35,7 @@ api:
 visualizer:
   replicaCount: 1
   image:
-    tag: visualizer-minimal-0.1.0
+    tag: visualizer-minimal-0.1.2
   service:
     type: LoadBalancer
     webPort: 80

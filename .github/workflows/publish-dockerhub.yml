@@ -92,10 +92,12 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: fe-visualizer
-          file: fe-visualizer/Dockerfile
+          file: fe-visualizer/Dockerfile.navigator2026
           push: true
           platforms: linux/amd64
           build-args: |
+            VITE_API_BASE_URL=/streetparade-navigator-2026/api
+            VITE_BASE_PATH=/streetparade-navigator-2026/
             VITE_ENABLE_SONG_DL_AND_EMBEDINGS=false
           tags: |
             ${{ env.DOCKERHUB_REPOSITORY }}:visualizer-minimal-${{ steps.versions.outputs.frontend_minor }}
