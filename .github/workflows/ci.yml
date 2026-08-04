@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: src
+      STREETPARADE_VECTOR_STORE: numpy
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,6 +144,33 @@ jobs:
         run: |
           docker compose config
           docker compose -f docker-compose.streetparade26.yml config
+
+      - name: Build minimal API image
+        run: |
+          docker build \
+            --build-arg API_PROFILE=minimal \
+            --build-arg ENABLE_SONG_DL_AND_EMBEDINGS=0 \
+            --build-arg STREETPARADE_VECTOR_STORE=numpy \
+            -t streetparade-api-minimal-ci .
+
+      - name: Smoke test minimal API image
+        run: |
+          docker run --rm streetparade-api-minimal-ci python - <<'PY'
+          import importlib.util
+          import os
+          import tempfile
+
+          os.environ["STREETPARADE_VECTOR_STORE"] = "numpy"
+          os.environ["STREETPARADE_NUMPY_VECTOR_DIR"] = tempfile.mkdtemp()
+
+          from streetparade_embeddings.vectorstore import get_vector_store
+          import streetparade_embeddings.api
+
+          assert importlib.util.find_spec("chromadb") is None
+          assert importlib.util.find_spec("torch") is None
+          assert importlib.util.find_spec("yt_dlp") is None
+          assert get_vector_store().query_by_vector([1.0, 0.0], n_results=1) == []
+          PY
 
       - name: Build streetparade26 visualizer image
         run: docker build -f fe-visualizer/Dockerfile.streetparade26 -t streetparade26-visualizer-ci fe-visualizer

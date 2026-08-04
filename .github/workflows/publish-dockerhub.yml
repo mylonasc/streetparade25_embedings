@@ -1,9 +1,13 @@
 name: Publish DockerHub Images
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - CI
     branches:
       - main
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -15,15 +19,19 @@ concurrency:
 
 env:
   DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || secrets.DOCKERHUB_REPOSITORY }}
+  SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   publish-minimal-images:
     name: Publish Minimal Images
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     environment: dockerhub-push
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
 
       - name: Read versions
         id: versions
@@ -36,7 +44,7 @@ jobs:
           PY
           )"
           frontend_version="$(node -p "require('./fe-visualizer/package.json').version")"
-          short_sha="${GITHUB_SHA::12}"
+          short_sha="${SOURCE_SHA::12}"
           backend_minor="$(printf '%s' "$backend_version" | cut -d. -f1,2)"
           frontend_minor="$(printf '%s' "$frontend_version" | cut -d. -f1,2)"
           echo "backend_version=${backend_version}" >> "$GITHUB_OUTPUT"
@@ -77,7 +85,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=streetparade-api-minimal
             org.opencontainers.image.version=${{ steps.versions.outputs.backend_version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
 
       - name: Build and push minimal visualizer
@@ -97,5 +105,5 @@ jobs:
           labels: |
             org.opencontainers.image.title=streetparade-visualizer-minimal
             org.opencontainers.image.version=${{ steps.versions.outputs.frontend_version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
