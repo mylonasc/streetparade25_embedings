@@ -1,7 +1,8 @@
 import * as tf from '@tensorflow/tfjs';
-import {safeGetItem, safeSetItem} from './storage.js';
+import {safeGetItem, safeSetItem} from './storage';
+import type {PreferenceValue} from './types';
 
-export type PreferenceValue = 'up' | 'down';
+export type {PreferenceValue} from './types';
 
 export type EmbeddedTrack = {
   id: number;

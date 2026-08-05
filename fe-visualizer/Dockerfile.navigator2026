@@ -12,7 +12,7 @@ ENV VITE_ENABLE_SONG_DL_AND_EMBEDINGS=$VITE_ENABLE_SONG_DL_AND_EMBEDINGS
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY index.html vite.config.js ./
+COPY index.html vite.config.ts ./
 COPY src ./src
 RUN npm run build
 

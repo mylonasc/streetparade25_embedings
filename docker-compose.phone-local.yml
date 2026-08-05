@@ -1,0 +1,13 @@
+# Local-only override for testing the visualizer from a phone on the same LAN.
+#
+# Mounts a phone-friendly nginx config that reverse-proxies same-origin /api/*
+# requests to the api service, mirroring how the deployed setup routes
+# <base>/api through a proxy in front of the static visualizer container.
+# The default nginx.conf and the production image are left untouched.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.phone-local.yml up -d
+services:
+  fe-visualizer:
+    volumes:
+      - ./fe-visualizer/nginx.phone.conf:/etc/nginx/conf.d/default.conf:ro

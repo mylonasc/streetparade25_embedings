@@ -16,6 +16,7 @@ chroma/
 vectorstore/
 e2e/test-results/
 e2e/playwright-report/
+e2e/screenshots/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
