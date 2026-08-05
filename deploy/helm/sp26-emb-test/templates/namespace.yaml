@@ -1,0 +1,8 @@
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "sp26-emb-test.namespace" . }}
+  labels:
+    {{- include "sp26-emb-test.labels" . | nindent 4 }}
+{{- end }}
