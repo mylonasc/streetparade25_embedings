@@ -13,7 +13,10 @@ image:
 api:
   replicaCount: 1
   image:
-    tag: api-minimal-0.1.2
+    # Path-agnostic build, identical recipe to the prod minimal API.
+    # Kept on the *-test-* tag (proven on /sp26-prod) until
+    # publish-dockerhub.yml builds path-agnostic minimal images.
+    tag: api-test-0.1.2
   service:
     type: ClusterIP
     port: 8000
@@ -34,7 +37,11 @@ api:
 visualizer:
   replicaCount: 1
   image:
-    tag: visualizer-minimal-0.1.2
+    # Path-agnostic visualizer (fe-visualizer/Dockerfile, VITE_BASE_PATH=./).
+    # MUST be path-agnostic - the chart's UI ingress rewrites the base path,
+    # and the path-locked visualizer-minimal-* build serves its "ok" health
+    # response instead of the app. Proven on /sp26-prod.
+    tag: visualizer-test-0.1.2
   service:
     type: ClusterIP
     webPort: 80

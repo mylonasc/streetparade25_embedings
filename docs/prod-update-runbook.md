@@ -51,7 +51,7 @@ image:
 
 api:
   image:
-    tag: api-minimal-0.1.2
+    tag: api-test-0.1.2
   service:
     type: ClusterIP
     port: 8000
@@ -65,7 +65,7 @@ api:
 
 visualizer:
   image:
-    tag: visualizer-minimal-0.1.2
+    tag: visualizer-test-0.1.2
   service:
     type: ClusterIP
   apiProxy:
@@ -91,10 +91,14 @@ ingress:
       secretName: magarathea-ddns-net-tls
 ```
 
-> Note: switch `api.image.tag` / `visualizer.image.tag` to the path-agnostic minimal tags
-> (e.g. `api-minimal-0.1.2` / `visualizer-minimal-0.1.2`) once
-> `publish-dockerhub.yml` builds the visualizer from `fe-visualizer/Dockerfile` with
-> `VITE_BASE_PATH=./`. The API minimal build is already identical to the staging API.
+> **Important:** the visualizer image MUST be the path-agnostic build
+> (`fe-visualizer/Dockerfile`, `VITE_BASE_PATH=./`). The chart's UI ingress rewrites the
+> base path away, so the path-locked `visualizer-minimal-*` build (from
+> `Dockerfile.navigator2026`) would serve its `location = /` "ok" health response as a
+> non-HTML body — the browser would offer to download it. Until
+> `publish-dockerhub.yml` is changed to build the visualizer from
+> `fe-visualizer/Dockerfile`, use the proven `*-test-*` tags (as in the snippet above).
+> The API `*-test-*` build is identical to the prod minimal build.
 
 ## Steps
 
@@ -128,7 +132,20 @@ grep -E 'name:|image:|path:' /tmp/sp26-emb-render.yaml
 Confirm the rendered resource names are `sp26-emb-*` (deployment, services, PVC,
 `sp26-emb-navigator-ui` / `sp26-emb-navigator-api` / `sp26-emb-navigator-ui-redirect`).
 
-### 4. Perform the upgrade
+### 4. Delete the manual ingresses FIRST
+
+The chart declares the same host+paths as the manual ingresses
+(`sp26-emb-navigator-ui-public`, `sp26-emb-navigator-api-public`). The ingress-nginx
+admission webhook rejects a second ingress defining the same host/path, so the manual
+ingresses must be removed **before** the upgrade:
+
+```bash
+kubectl delete ingress sp26-emb-navigator-ui-public sp26-emb-navigator-api-public -n sp26-dev
+```
+
+The upgrade in step 5 recreates routing through the chart-managed ingresses.
+
+### 5. Perform the upgrade
 
 ```bash
 helm upgrade sp26-emb deploy/helm/sp26-emb-prod \
@@ -137,15 +154,6 @@ helm upgrade sp26-emb deploy/helm/sp26-emb-prod \
 kubectl rollout status deploy/sp26-emb-api -n sp26-dev --timeout=180s
 kubectl rollout status deploy/sp26-emb-visualizer -n sp26-dev --timeout=180s
 kubectl get pods -n sp26-dev
-```
-
-### 5. Remove the manual ingresses
-
-The chart now owns `sp26-emb-navigator-ui`, `sp26-emb-navigator-api` and
-`sp26-emb-navigator-ui-redirect`. Delete the manually created ones:
-
-```bash
-kubectl delete ingress sp26-emb-navigator-ui-public sp26-emb-navigator-api-public -n sp26-dev
 ```
 
 ### 6. Remove the stale release and duplicate resources
@@ -174,8 +182,8 @@ kubectl delete svc rbac-test -n sp26-dev   # only if confirmed unused
 ### 7. Verify production
 
 ```bash
-# UI
-curl -sS -o /dev/null -w '%{http_code} -> %{redirect_url}\n' https://magarathea.ddns.net/streetparade-navigator-2026
+# UI (must be text/html, NOT application/octet-stream)
+curl -sS -D - -o /dev/null https://magarathea.ddns.net/streetparade-navigator-2026/ | grep -iE 'HTTP/|content-type'
 curl -sS https://magarathea.ddns.net/streetparade-navigator-2026/ | grep -o 'src="[^"]*"' | head -1
 # API
 curl -sS -o /dev/null -w '%{http_code}\n' https://magarathea.ddns.net/streetparade-navigator-2026/api/health
@@ -190,13 +198,24 @@ curl -sS https://magarathea.ddns.net/sp26-prod/api/visualization | \
 
 If the UI or API regresses:
 
-1. Re-create the manual ingresses from the original manifests
-   (`sp26-emb-navigator-ui-public`, `sp26-emb-navigator-api-public`), or
-   `kubectl apply` the previously saved versions.
-2. `helm rollback sp26-emb <previous-revision> --namespace sp26-dev`.
+1. `helm rollback sp26-emb <previous-revision> --namespace sp26-dev`.
+2. Re-create the manual ingresses (`sp26-emb-navigator-ui-public`,
+   `sp26-emb-navigator-api-public`) from the original manifests or the saved versions
+   below. A rollback removes the chart-managed ingresses, so routing is restored only
+   once the manual ones are back.
 3. Verify `kubectl get pods -n sp26-dev` and the endpoints above.
-4. Do **not** delete the stale `sp26-dev` release or manual ingresses until the new
-   configuration is confirmed working.
+4. Do **not** delete the stale `sp26-dev` release or the chart-managed ingresses until the
+   new configuration is confirmed working.
+
+### Save the manual ingress manifests before upgrading
+
+To make rollback easy, export the manual ingresses to a file before deleting them in
+step 4:
+
+```bash
+kubectl get ingress sp26-emb-navigator-ui-public sp26-emb-navigator-api-public \
+  -n sp26-dev -o yaml > /tmp/sp26-manual-ingresses.yaml
+```
 
 ## Refreshing the staging data (`sp26-prod`)
 
