@@ -1,0 +1,6 @@
+.git/
+.github/
+*.swp
+*.tmp
+*.bak
+README.md

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sp26-emb-prod.fullname" . }}-visualizer
+  namespace: {{ include "sp26-emb-prod.namespace" . }}
+  labels:
+    {{- include "sp26-emb-prod.labels" . | nindent 4 }}
+    app.kubernetes.io/component: visualizer
+  annotations:
+    {{- toYaml .Values.visualizer.service.annotations | nindent 4 }}
+spec:
+  type: {{ .Values.visualizer.service.type }}
+  ports:
+    - name: web
+      port: {{ .Values.visualizer.service.webPort }}
+      targetPort: web
+      protocol: TCP
+    {{- if .Values.visualizer.apiProxy.enabled }}
+    - name: api-proxy
+      port: {{ .Values.visualizer.service.apiProxyPort }}
+      targetPort: api-proxy
+      protocol: TCP
+    {{- end }}
+  selector:
+    {{- include "sp26-emb-prod.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: visualizer
