@@ -1,0 +1,100 @@
+name: Publish Test DockerHub Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/sp26-test-env
+    paths:
+      - 'fe-visualizer/**'
+      - 'src/**'
+      - 'Dockerfile'
+      - '.github/workflows/publish-dockerhub-test.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dockerhub-test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY || secrets.DOCKERHUB_REPOSITORY }}
+  SOURCE_SHA: ${{ github.sha }}
+
+jobs:
+  publish-test-images:
+    name: Publish Test Images
+    runs-on: ubuntu-latest
+    environment: dockerhub-push
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read versions
+        id: versions
+        run: |
+          backend_version="$(python - <<'PY'
+          import tomllib
+
+          with open('pyproject.toml', 'rb') as handle:
+              print(tomllib.load(handle)['project']['version'])
+          PY
+          )"
+          frontend_version="$(node -p "require('./fe-visualizer/package.json').version")"
+          short_sha="${SOURCE_SHA::12}"
+          echo "backend_version=${backend_version}" >> "$GITHUB_OUTPUT"
+          echo "frontend_version=${frontend_version}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Check DockerHub configuration
+        run: |
+          test -n "$DOCKERHUB_REPOSITORY" || { echo 'Set vars.DOCKERHUB_REPOSITORY or secrets.DOCKERHUB_REPOSITORY to your DockerHub repository, for example username/repository.' >&2; exit 1; }
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push test API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            API_PROFILE=minimal
+            ENABLE_SONG_DL_AND_EMBEDINGS=0
+            STREETPARADE_VECTOR_STORE=numpy
+          tags: |
+            ${{ env.DOCKERHUB_REPOSITORY }}:api-test-${{ steps.versions.outputs.backend_version }}
+            ${{ env.DOCKERHUB_REPOSITORY }}:api-test-${{ steps.versions.outputs.backend_version }}-${{ steps.versions.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.title=streetparade-api-test
+            org.opencontainers.image.version=${{ steps.versions.outputs.backend_version }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Build and push test visualizer (path-agnostic)
+        uses: docker/build-push-action@v6
+        with:
+          context: fe-visualizer
+          file: fe-visualizer/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            VITE_BASE_PATH=./
+
+          tags: |
+            ${{ env.DOCKERHUB_REPOSITORY }}:visualizer-test-${{ steps.versions.outputs.frontend_version }}
+            ${{ env.DOCKERHUB_REPOSITORY }}:visualizer-test-${{ steps.versions.outputs.frontend_version }}-${{ steps.versions.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.title=streetparade-visualizer-test
+            org.opencontainers.image.version=${{ steps.versions.outputs.frontend_version }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

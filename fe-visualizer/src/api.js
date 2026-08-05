@@ -4,10 +4,15 @@ export function resolveApiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (typeof window === 'undefined') return (configured || 'http://localhost:8000').replace(/\/$/, '');
   const browserHost = window.location.hostname;
-  if (configured && !(isLoopbackUrl(configured) && !isLoopbackHost(browserHost))) {
+  if (isLoopbackHost(browserHost)) {
+    if (configured) return configured.replace(/\/$/, '');
+    return `${window.location.protocol}//${browserHost}:8000`;
+  }
+  if (configured && !isLoopbackUrl(configured)) {
     return configured.replace(/\/$/, '');
   }
-  return `${window.location.protocol}//${browserHost}:8000`;
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  return `${pathname}/api`;
 }
 
 function isLoopbackUrl(value) {
