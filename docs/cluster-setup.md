@@ -20,8 +20,8 @@ How the SP26 deployments run on the `magarathea.ddns.net` Kubernetes cluster, as
 |-----------------|------------------------------------------------------------------|
 | Namespace       | `sp26-emb-live`                                                  |
 | Helm release    | `sp26-emb-live` (chart `deploy/helm/sp26-emb-prod`, revision 2)  |
-| Visualizer      | `mylonasc/magarathea:visualizer-test-0.1.2` (ClusterIP :80)      |
-| API             | `mylonasc/magarathea:api-test-0.1.2` (ClusterIP :8000)           |
+| Visualizer      | `mylonasc/magarathea:visualizer-test-0.1.3` (ClusterIP :80)      |
+| API             | `mylonasc/magarathea:api-test-0.1.3` (ClusterIP :8000)           |
 | PVC             | `sp26-emb-data` (2Gi, `standard-rwo`), mounted at `/data` in API |
 | Ingresses       | `sp26-emb-navigator-ui`, `sp26-emb-navigator-api`, `sp26-emb-navigator-ui-redirect` |
 
