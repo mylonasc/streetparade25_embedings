@@ -1,7 +1,7 @@
 # Cluster setup (Street Parade 2026)
 
 How the SP26 deployments run on the `magarathea.ddns.net` Kubernetes cluster, as of
-2026-08-05.
+2026-08-06.
 
 ## Overview
 
@@ -12,7 +12,8 @@ How the SP26 deployments run on the `magarathea.ddns.net` Kubernetes cluster, as
   load balancer IP is `34.13.231.86`.
 - `magarathea.ddns.net` is kept pointing at that IP by the `noip-sync` CronJob that runs
   inside the `ingress-nginx` namespace.
-- The only live SP26 deployment serves **`https://magarathea.ddns.net/streetparade-navigator-2026/`**.
+- The live SP26 deployment serves **`https://magarathea.ddns.net/streetparade-navigator-2026/`**.
+- A test deployment serves **`https://magarathea.ddns.net/sp26-test/`**.
 
 ## The live deployment
 
@@ -42,6 +43,26 @@ helm upgrade sp26-emb-live deploy/helm/sp26-emb-prod --namespace sp26-emb-live \
   --set persistence.existingClaim=sp26-emb-data \
   --set ingress.enabled=true
 ```
+
+## The test deployment
+
+| Item            | Value                                                            |
+|-----------------|------------------------------------------------------------------|
+| Namespace       | `sp26-test`                                                      |
+| Helm release    | `sp26-emb-test` (chart `deploy/helm/sp26-emb-test`, revision 1)  |
+| Chart version   | 0.1.4                                                            |
+| Visualizer      | `mylonasc/magarathea:visualizer-test-0.1.3` (ClusterIP :80)      |
+| API             | `mylonasc/magarathea:api-test-0.1.3` (ClusterIP :8000)           |
+| PVC             | `sp26-emb-test-data` (2Gi, `standard-rwo`), mounted at `/data`   |
+| Ingresses       | `sp26-emb-test-navigator-ui`, `sp26-emb-test-navigator-api`, `sp26-emb-test-navigator-ui-redirect` |
+
+Serves the base path `/sp26-test`. Installed with:
+
+```bash
+helm upgrade --install sp26-emb-test deploy/helm/sp26-emb-test --namespace sp26-test --create-namespace
+```
+
+Unlike the live deployment, the test chart renders its own `Namespace` and `PersistentVolumeClaim` (create them before the app pods start, then load data with the temporary-pod procedure from the chart README). It also references the `dockerhub-regcred` pull secret in the pod specs; that secret was copied into `sp26-test` from `sp26-emb-live` because the new namespace starts without it.
 
 ## Routing and ingresses
 
@@ -114,8 +135,9 @@ TLS is host-level and shared — there is no per-namespace certificate.
   `values-sp26-dev.yaml` is the values file for the live base path.
 - `deploy/helm/sp26-emb/` — legacy original prod chart (path-locked visualizer,
   LoadBalancer service, api-proxy sidecar). No longer deployed.
-- `deploy/helm/sp26-emb-test/` — former test chart. The `sp26-test` and `sp26-prod`
-  namespaces that once hosted `/sp26-test` and `/sp26-prod` have been removed.
+- `deploy/helm/sp26-emb-test/` — the active test chart, deployed to the `sp26-test`
+  namespace at `/sp26-test` (chart version 0.1.4, images `*-test-0.1.3`). The former
+  `sp26-prod` namespace is gone.
 
 ## Gotchas
 
