@@ -2,5 +2,5 @@ apiVersion: v2
 name: sp26-emb-prod
 description: Street Parade 26 embedding visualizer test deployment at /sp26-prod.
 type: application
-version: 0.1.3
+version: 0.1.4
 appVersion: "0.1.3"
