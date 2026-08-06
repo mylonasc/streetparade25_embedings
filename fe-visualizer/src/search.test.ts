@@ -1,10 +1,10 @@
 import {describe, expect, it} from 'vitest';
-import {buildSearchIndex, searchResults} from './search.js';
+import {buildSearchIndex, searchResults} from './search';
 
 const points = [
-  {id: 'artist-1', kind: 'artist', label: 'Nina Zurich', metadata: {tracks: [{title: 'Rain Lift', url: 'https://soundcloud.com/nina/rain'}]}},
-  {id: 'track-1', kind: 'track', label: 'Night Bus', metadata: {artist_name: 'Cem', url: 'https://example.test/night-bus', bpm: 132}},
-  {id: 'user-track-1', kind: 'user_track', label: 'Upload A', metadata: {source_url: 'https://youtube.com/watch?v=abc', source_type: 'youtube'}},
+  {id: 'artist-1', kind: 'artist' as const, label: 'Nina Zurich', metadata: {tracks: [{title: 'Rain Lift', url: 'https://soundcloud.com/nina/rain'}]}},
+  {id: 'track-1', kind: 'track' as const, label: 'Night Bus', metadata: {artist_name: 'Cem', url: 'https://example.test/night-bus', bpm: 132}},
+  {id: 'user-track-1', kind: 'user_track' as const, label: 'Upload A', metadata: {source_url: 'https://youtube.com/watch?v=abc', source_type: 'youtube'}},
 ];
 
 describe('search helpers', () => {

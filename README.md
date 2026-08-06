@@ -227,6 +227,19 @@ MEDIA_FIXTURE_CACHE=.ci-media-cache pytest tests/test_media_fixtures.py
 
 The fixture MP3s are not committed to the repository. They are stored as a zipped GitHub release asset named `media-fixtures.zip` on the `ci-media-fixtures` release. To refresh the ZIP locally, run `python tests/fixtures/download_media_fixtures.py tests/fixtures/media_manifest.json .ci-media-cache`, zip the contents of `.ci-media-cache`, and replace the release asset. The direct live-download test file remains available for explicit local checks with `RUN_LIVE_DOWNLOAD_TESTS=1 pytest tests/test_download_links.py`.
 
+## Local docker-compose setup for wifi testing
+
+In the cluster (live) deployment, expects docker containers that do not have hard-coded paths (this helps with CICD containerization).
+
+Vite hard-codes some paths during image creation. In order to avoid having a per-deploymend TLS termination setup (it would require copying certs to each deployment - which are now shared with the main cluster deployment)
+it was decided to have a deployment that does not make use of custom paths or path transaction. 
+
+To run a local deployment that is aligned with what is in the cluster, but with docker compose, run
+
+```
+docker compose -f docker-compose.yml -f docker-compose.phone-local.yml up 
+```
+
 ## `/streetparade26/` Deployment
 
 The repository includes a separate Docker Compose setup for serving the visualizer behind nginx under the `/streetparade26/` path:

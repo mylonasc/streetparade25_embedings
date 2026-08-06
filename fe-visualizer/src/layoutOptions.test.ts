@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalLearningRate, optionalNumber} from './layoutOptions.js';
+import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalLearningRate, optionalNumber} from './layoutOptions';
 
 describe('layout options', () => {
   it('builds the backend payload with raw inputs when PCA is disabled', () => {

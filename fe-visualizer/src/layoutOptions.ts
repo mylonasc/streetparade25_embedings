@@ -1,4 +1,32 @@
-export const DEFAULT_LAYOUT_OPTIONS = {
+export type LayoutOptions = {
+  pcaEnabled: boolean;
+  pcaComponents: string;
+  tsneInput: string;
+  clusterCount: string;
+  clusterInput: string;
+  tsnePerplexity: string;
+  tsneLearningRate: string;
+  tsneMetric: string;
+  randomState: string;
+  linkedTrackCount: string;
+  similarityThreshold: string;
+  similarityMetric: string;
+};
+
+export type LayoutPayload = {
+  username: string;
+  pca_enabled: boolean;
+  pca_components: number;
+  tsne_input: string;
+  cluster_count: number | null;
+  cluster_input: string;
+  tsne_perplexity: number | null;
+  tsne_learning_rate: number | 'auto';
+  tsne_metric: string;
+  random_state: number;
+};
+
+export const DEFAULT_LAYOUT_OPTIONS: LayoutOptions = {
   pcaEnabled: false,
   pcaComponents: '10',
   tsneInput: 'raw',
@@ -13,7 +41,7 @@ export const DEFAULT_LAYOUT_OPTIONS = {
   similarityMetric: 'cosine',
 };
 
-export function layoutPayload(username, options) {
+export function layoutPayload(username: string, options: LayoutOptions): LayoutPayload {
   const pcaEnabled = Boolean(options.pcaEnabled);
   return {
     username,
@@ -29,13 +57,13 @@ export function layoutPayload(username, options) {
   };
 }
 
-export function optionalNumber(value) {
+export function optionalNumber(value: unknown): number | null {
   if (String(value).trim() === '') return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-export function optionalLearningRate(value) {
+export function optionalLearningRate(value: unknown): number | 'auto' {
   const cleaned = String(value).trim();
   if (!cleaned || cleaned.toLowerCase() === 'auto') return 'auto';
   const numeric = Number(cleaned);

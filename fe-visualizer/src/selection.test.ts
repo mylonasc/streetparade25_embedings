@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {markKey, modelSummary, playlistForPoint, playlistTrack, preferenceKeyForPoint, preferenceTarget, visibleMetadataEntries} from './selection.js';
+import {markKey, modelSummary, playlistForPoint, playlistTrack, preferenceKeyForPoint, preferenceTarget, visibleMetadataEntries} from './selection';
 
 describe('selection helpers', () => {
   it('creates playlists for artist and soundcloud points', () => {
@@ -35,15 +35,15 @@ describe('selection helpers', () => {
   });
 
   it('builds preference targets for base and user songs', () => {
-    const track = {id: 'track-7', kind: 'track', metadata: {track_id: 7, vector_id: 'v7'}};
+    const track = {id: 'track-7', kind: 'track' as const, metadata: {track_id: 7, vector_id: 'v7'}};
     expect(preferenceKeyForPoint(track)).toBe('track:7');
     expect(preferenceTarget(track)).toMatchObject({target_kind: 'track', target_id: '7', track_id: 7, vector_id: 'v7'});
 
-    const userTrack = {id: 'user-track-3', kind: 'user_track', metadata: {id: 3, track_id: 9}};
+    const userTrack = {id: 'user-track-3', kind: 'user_track' as const, metadata: {id: 3, track_id: 9}};
     expect(preferenceKeyForPoint(userTrack)).toBe('user_track:3');
     expect(preferenceTarget(userTrack)).toMatchObject({target_kind: 'user_track', target_id: '3', user_track_id: 3, track_id: 9});
 
-    const artist = {id: 'artist-nina', kind: 'artist', label: 'Nina', metadata: {artist_name: 'Nina'}};
+    const artist = {id: 'artist-nina', kind: 'artist' as const, label: 'Nina', metadata: {artist_name: 'Nina'}};
     expect(preferenceKeyForPoint(artist)).toBe('artist:artist-nina');
     expect(preferenceTarget(artist)).toMatchObject({target_kind: 'artist', target_id: 'artist-nina'});
   });
