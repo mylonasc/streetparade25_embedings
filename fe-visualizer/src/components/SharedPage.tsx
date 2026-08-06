@@ -1,5 +1,5 @@
-import {MapPinned, Play, Truck} from 'lucide-react';
-import {useEffect, useRef, useState} from 'react';
+import {MapPinned, Truck} from 'lucide-react';
+import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
 import {parseTimeRange} from '../loveMobile';
 import type {SharedPayload, SharedTruck} from '../types';
 
@@ -44,7 +44,16 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
                   const range = parseTimeRange(truck.time);
                   const soundcloudUrl = truck.soundcloudUrl || '';
                   return (
-                    <li key={`${truck.number}-${index}`}>
+                    <li
+                      key={`${truck.number}-${index}`}
+                      className={soundcloudUrl ? 'liked-truck-box' : ''}
+                      role={soundcloudUrl ? 'button' : undefined}
+                      tabIndex={soundcloudUrl ? 0 : undefined}
+                      aria-pressed={soundcloudUrl ? activeTrack?.url === soundcloudUrl : undefined}
+                      aria-label={soundcloudUrl ? `Play ${truck.name || truck.number} on SoundCloud` : undefined}
+                      onClick={soundcloudUrl ? () => setActiveTrack({label: truck.name || `Truck ${truck.number}`, url: soundcloudUrl}) : undefined}
+                      onKeyDown={soundcloudUrl ? (event) => handleBoxKeyDown(event, () => setActiveTrack({label: truck.name || `Truck ${truck.number}`, url: soundcloudUrl})) : undefined}
+                    >
                       <span className="liked-truck-number">#{truck.number}</span>
                       <span className="liked-truck-detail">
                         <strong>{truck.name}</strong>
@@ -53,18 +62,6 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
                         <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
                         {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
                       </span>
-                      {soundcloudUrl && (
-                        <button
-                          type="button"
-                          className="share-play-button"
-                          aria-label={`Play ${truck.name || truck.number}`}
-                          aria-pressed={activeTrack?.url === soundcloudUrl}
-                          onClick={() => setActiveTrack({label: truck.name || `Truck ${truck.number}`, url: soundcloudUrl})}
-                          title={`Play ${truck.name || truck.number} on SoundCloud`}
-                        >
-                          <Play size={16} aria-hidden="true" />
-                        </button>
-                      )}
                     </li>
                   );
                 })}
@@ -85,21 +82,18 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
               const score = typeof entry === 'string' ? null : entry.score;
               const soundcloudUrl = typeof entry === 'string' ? '' : entry.soundcloudUrl || '';
               return (
-                <span className="shared-artist-chip" key={name}>
+                <span
+                  className={`shared-artist-chip${soundcloudUrl ? ' clickable' : ''}`}
+                  key={name}
+                  role={soundcloudUrl ? 'button' : undefined}
+                  tabIndex={soundcloudUrl ? 0 : undefined}
+                  aria-pressed={soundcloudUrl ? activeTrack?.url === soundcloudUrl : undefined}
+                  aria-label={soundcloudUrl ? `Play ${name} on SoundCloud` : undefined}
+                  onClick={soundcloudUrl ? () => setActiveTrack({label: name, url: soundcloudUrl}) : undefined}
+                  onKeyDown={soundcloudUrl ? (event) => handleBoxKeyDown(event, () => setActiveTrack({label: name, url: soundcloudUrl})) : undefined}
+                >
                   {name}
                   {score !== null && score !== undefined && Number.isFinite(score) && <span className="shared-artist-score">Like {formatScore(score)}</span>}
-                  {soundcloudUrl && (
-                    <button
-                      type="button"
-                      className="share-play-button chip"
-                      aria-label={`Play ${name}`}
-                      aria-pressed={activeTrack?.url === soundcloudUrl}
-                      onClick={() => setActiveTrack({label: name, url: soundcloudUrl})}
-                      title={`Play ${name} on SoundCloud`}
-                    >
-                      <Play size={14} aria-hidden="true" />
-                    </button>
-                  )}
                 </span>
               );
             })}
@@ -173,6 +167,13 @@ function SoundCloudPlayer({url, label, onClose}: {url: string; label: string; on
 
 function byScore(a: SharedTruck, b: SharedTruck): number {
   return b.score - a.score || numericTruckNumber(a) - numericTruckNumber(b);
+}
+
+function handleBoxKeyDown(event: KeyboardEvent<HTMLElement>, activate: () => void) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    activate();
+  }
 }
 
 function byOrder(a: SharedTruck, b: SharedTruck): number {
