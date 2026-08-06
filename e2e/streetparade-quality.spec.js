@@ -173,7 +173,7 @@ for (const device of DEVICES) {
     const { defaultBrowserType, ...deviceOptions } = devices[device.name];
     test.use(deviceOptions);
 
-    test('full flow stays inside the viewport with no text overflow or unintended overlap', async ({ page }) => {
+    test('full flow stays inside the viewport with no text overflow or unintended overlap', async ({ page, browser }) => {
       test.setTimeout(180_000);
       const { slug } = device;
       const username = `quality-${slug}`;
@@ -227,8 +227,29 @@ for (const device of DEVICES) {
       await page.locator('.artist-favorites-panel').getByRole('button', { name: 'Show loved trucks' }).click();
       await expect(page.locator('.liked-trucks-modal')).toBeVisible();
       await runChecks(page, slug, '06c-loved-trucks-modal');
-      await page.getByRole('button', { name: 'Close' }).click();
+
+      await page.locator('.liked-trucks-modal').getByRole('button', { name: 'Share' }).click();
+      await expect(page.locator('.liked-trucks-modal .share-menu-dropdown')).toBeVisible();
+      await expect(page.locator('.liked-trucks-modal').getByRole('menuitem', { name: 'Copy link' })).toBeEnabled();
+      await runChecks(page, slug, '06d-trucks-share-menu');
+      const telegramHref = await page.getByRole('menuitem', { name: 'Telegram' }).getAttribute('href');
+      const sharedUrl = new URL(telegramHref).searchParams.get('url');
+      expect(sharedUrl).toMatch(/\?share=/);
+      await page.keyboard.press('Escape');
+      await page.locator('.liked-trucks-modal').getByRole('button', { name: 'Close' }).click();
       await expect(page.locator('.liked-trucks-modal')).toBeHidden();
+
+      const sharedContext = await browser.newContext();
+      const sharedPage = await sharedContext.newPage();
+      await sharedPage.goto(sharedUrl);
+      await expect(sharedPage.locator('.share-page')).toBeVisible();
+      await expect(sharedPage.locator('.share-page h1')).not.toBeEmpty();
+      expect(await sharedPage.locator('.share-page').textContent()).toContain(username);
+      await runChecks(sharedPage, slug, '06e-shared-page');
+      await sharedPage.locator('.share-page').getByRole('button', { name: 'Explore the map' }).click();
+      await expect(sharedPage.locator('canvas.plot')).toBeVisible();
+      await runChecks(sharedPage, slug, '06f-shared-page-entered');
+      await sharedContext.close();
 
       await page.locator('.artist-favorites-panel select').selectOption('all');
       const truckChip = page.locator('.love-mobile-chip').first();

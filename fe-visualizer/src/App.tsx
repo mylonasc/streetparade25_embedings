@@ -10,6 +10,7 @@ import {
 import type {EmbeddedTrack, LossPoint, TrainingOptions, TrainedPreferenceModel} from './preferenceTraining';
 import {buildSearchIndex, searchResults} from './search';
 import {playlistForPoint, preferenceKeyForPoint, preferenceTarget} from './selection';
+import {serializeLikedTrucks, shareBlurb} from './share';
 import {MARKS_KEY, USERNAME_KEY, readMarks, safeGetItem, safeSetItem} from './storage';
 import {useMobileViewport} from './responsive';
 import {truckNumber} from './loveMobile';
@@ -18,10 +19,11 @@ import {Visualizer} from './components/Visualizer';
 import {Selection} from './components/Selection';
 import {HelpModal, LayoutModal, LikedTrucksModal, LoveMobileModal, SavedModelPrompt, TrainModelPrompt} from './components/Modals';
 import {ArtistFavoritesPanel, PreferenceTrainingPanel, TrackRow, UsernameGate} from './components/Panels';
+import {SharedFavoritesPage} from './components/SharedPage';
 import {ShareMenu} from './components/ShareMenu';
 import type {
-  ArtistSummary, Job, LayoutJob, LikedTruck, LoveMobile, Point, PointLike, Prediction, PreferenceValue, SimilarityEdge,
-  Stats, UserTrack, VisualizationFeatures, VisualizationPayload,
+  ArtistSummary, Job, LayoutJob, LikedTruck, LoveMobile, Point, PointLike, Prediction, PreferenceValue, SharedPayload,
+  SimilarityEdge, Stats, UserTrack, VisualizationFeatures, VisualizationPayload,
 } from './types';
 
 const SONG_DOWNLOADS_BUILD_ENABLED = import.meta.env.VITE_ENABLE_SONG_DL_AND_EMBEDINGS !== 'false';
@@ -111,6 +113,16 @@ export function App() {
   const [visualizationLoading, setVisualizationLoading] = useState(false);
   const [activeLoveMobile, setActiveLoveMobile] = useState<LoveMobile | null>(null);
   const [showLikedTrucks, setShowLikedTrucks] = useState(false);
+  const [sharePage, setSharePage] = useState<SharedPayload | null>(null);
+
+  async function refreshPreferences(activeUsername = username): Promise<void> {
+    if (!activeUsername) return;
+    try {
+      setThumbPreferences((await getUserPreferences(activeUsername)) || {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   async function loadAll(activeUsername = username): Promise<void> {
     if (!activeUsername) return;
@@ -127,16 +139,16 @@ export function App() {
         applyVisualizationPayload(payload);
       }
       const userSongDownloadsEnabled = SONG_DOWNLOADS_BUILD_ENABLED && Boolean((payload || status).features?.song_downloads_and_embeddings);
-      const [tracks, preferences] = await Promise.all([
-        userSongDownloadsEnabled ? request<UserTrack[]>(`/users/${encodeURIComponent(activeUsername)}/tracks`) : Promise.resolve([] as UserTrack[]),
-        getUserPreferences(activeUsername),
-      ]);
       setSongDownloadsEnabled(userSongDownloadsEnabled);
-      setUserTracks(tracks || []);
-      setThumbPreferences(preferences || {});
+      if (userSongDownloadsEnabled) {
+        setUserTracks((await request<UserTrack[]>(`/users/${encodeURIComponent(activeUsername)}/tracks`)) || []);
+      } else {
+        setUserTracks([]);
+      }
     } finally {
       setVisualizationLoading(false);
     }
+    await refreshPreferences(activeUsername);
   }
 
   function applyVisualizationPayload(viz: VisualizationPayload): void {
@@ -157,7 +169,6 @@ export function App() {
       const user = await request<{username: string}>('/users', {method: 'POST', body: JSON.stringify({username: draftUsername})});
       safeSetItem(USERNAME_KEY, user.username);
       setUsername(user.username);
-      await loadAll(user.username);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -203,6 +214,23 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  async function createSharePage(): Promise<{link: string; text: string}> {
+    const payload = {
+      username,
+      marked: Array.from(marks),
+      likedTrucks: serializeLikedTrucks(likedTrucks),
+      likedArtists: likedArtistNames,
+    };
+    const share = await request<{token: string}>('/shares', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return {
+      link: `${window.location.origin}${window.location.pathname}?share=${share.token}`,
+      text: shareBlurb(username, payload.likedTrucks.length, payload.likedArtists.length),
+    };
   }
 
   function registerPreference(): void {
@@ -334,23 +362,42 @@ export function App() {
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get('share');
     if (!token) return;
-    request<{payload?: {username?: string; marked?: string[]}}>(`/shares/${token}`).then((share) => {
-      const payload = share.payload || {};
-      if (payload.username) {
-        safeSetItem(USERNAME_KEY, payload.username);
-        setUsername(payload.username);
-        setDraftUsername(payload.username);
-      }
-      if (Array.isArray(payload.marked)) {
-        const next = new Set(payload.marked);
-        safeSetItem(MARKS_KEY, JSON.stringify(Array.from(next)));
-        setMarks(next);
-      }
+    request<{payload?: SharedPayload}>(`/shares/${token}`).then((share) => {
+      if (!share.payload) throw new Error('Share payload is empty.');
+      setSharePage(share.payload);
     }).catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
+  function enterFromShare(): void {
+    if (!sharePage) return;
+    if (sharePage.username) {
+      safeSetItem(USERNAME_KEY, sharePage.username);
+      setUsername(sharePage.username);
+      setDraftUsername(sharePage.username);
+    }
+    if (Array.isArray(sharePage.marked)) {
+      const next = new Set(sharePage.marked);
+      safeSetItem(MARKS_KEY, JSON.stringify(Array.from(next)));
+      setMarks(next);
+    }
+    setSharePage(null);
+  }
+
   useEffect(() => {
     if (username) loadAll().catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  }, [username]);
+
+  useEffect(() => {
+    if (!username) return;
+    const refreshOnVisible = () => {
+      if (document.visibilityState === 'visible') void refreshPreferences(username);
+    };
+    window.addEventListener('focus', refreshOnVisible);
+    document.addEventListener('visibilitychange', refreshOnVisible);
+    return () => {
+      window.removeEventListener('focus', refreshOnVisible);
+      document.removeEventListener('visibilitychange', refreshOnVisible);
+    };
   }, [username]);
 
   useEffect(() => {
@@ -475,6 +522,10 @@ export function App() {
     }
     return Array.from(trucks.values()).sort((a, b) => String(truckNumber(a.truck)).localeCompare(String(truckNumber(b.truck)), undefined, {numeric: true}));
   }, [artistSummaries]);
+  const likedArtistNames = useMemo(
+    () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.predictedUp > artist.predictedDown).map((artist) => artist.name),
+    [artistSummaries],
+  );
 
   async function loadEmbeddedTracks(): Promise<EmbeddedTrack[]> {
     const tracks: EmbeddedTrack[] = [];
@@ -560,6 +611,10 @@ export function App() {
     }
   }
 
+  if (sharePage) {
+    return <SharedFavoritesPage payload={sharePage} onEnter={enterFromShare} />;
+  }
+
   if (!username) {
     return <UsernameGate draftUsername={draftUsername} setDraftUsername={setDraftUsername} saveUsername={saveUsername} error={error} />;
   }
@@ -581,7 +636,7 @@ export function App() {
             <span>{stats.point_count} points</span>
             <span>{stats.user_point_count} uploads</span>
           </div>
-          <ShareMenu />
+          <ShareMenu onPrepare={createSharePage} />
         </div>
       </header>
       {(message || error) && <section className={`notice ${error ? 'error' : 'success'}`}>{error || message}</section>}
@@ -738,7 +793,7 @@ export function App() {
       {showSavedModelPrompt && <SavedModelPrompt onLoad={loadPreferenceColorModel} onClose={() => setShowSavedModelPrompt(false)} busy={preferenceTrainingBusy} />}
       {showTrainPrompt && <TrainModelPrompt count={preferenceRegistrationCount} onDismiss={() => setShowTrainPrompt(false)} onTrain={handleTrainPromptTrain} />}
       {activeLoveMobile && <LoveMobileModal loveMobile={activeLoveMobile} onClose={() => setActiveLoveMobile(null)} />}
-      {showLikedTrucks && <LikedTrucksModal trucks={likedTrucks} onClose={() => setShowLikedTrucks(false)} />}
+      {showLikedTrucks && <LikedTrucksModal trucks={likedTrucks} onCreateShare={createSharePage} onClose={() => setShowLikedTrucks(false)} />}
     </main>
   );
 }

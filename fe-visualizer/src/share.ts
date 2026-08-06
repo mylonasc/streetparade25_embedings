@@ -12,6 +12,32 @@ export function whatsAppShareUrl(link: string, text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`;
 }
 
+export function serializeLikedTrucks(trucks: {truck: {number?: number | string; source_index?: number; name?: string; title?: string; genres?: string; time?: string}; artists: string[]}[]): {
+  number: string;
+  name: string;
+  genres: string;
+  time: string;
+  artists: string[];
+}[] {
+  return trucks.map(({truck, artists}) => ({
+    number: truckNumber(truck),
+    name: truck.name || truck.title || '',
+    genres: truck.genres || '',
+    time: truck.time || '',
+    artists,
+  }));
+}
+
+export function shareBlurb(username: string, truckCount: number, artistCount: number): string {
+  if (truckCount > 0) return `${username}'s Street Parade 2026 favorites: ${truckCount} love mobile${truckCount === 1 ? '' : 's'} and ${artistCount} act${artistCount === 1 ? '' : 's'}.`;
+  return `${username}'s Street Parade 2026 favorites.`;
+}
+
+function truckNumber(truck: {number?: number | string; source_index?: number}): string {
+  const number = truck.number ?? truck.source_index;
+  return number !== undefined && number !== null ? String(number) : '';
+}
+
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {

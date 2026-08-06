@@ -30,9 +30,15 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .app-bar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .share-menu { position: relative; }
 .share-menu-dropdown { position: absolute; z-index: 25; top: calc(100% + 8px); right: 0; display: grid; gap: 4px; min-width: 220px; padding: 8px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel-strong); box-shadow: 0 18px 50px rgba(0,0,0,0.45); }
+.share-menu-dropdown.align-left { right: auto; left: 0; }
+.share-menu-dropdown.align-right { right: 0; left: auto; }
 .share-menu-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 12px; color: var(--text); text-align: left; font-size: 0.9rem; font-weight: 800; }
 .share-menu-row svg { width: 20px; height: 20px; flex: none; }
 .share-menu-row:hover, .share-menu-row:focus-visible { background: rgba(255,255,255,0.07); }
+.share-menu-row:disabled, .share-menu-row[aria-disabled="true"] { opacity: 0.55; cursor: progress; }
+.share-menu-hint { margin: 0; padding: 2px 12px 6px; color: var(--muted); font-size: 0.76rem; font-weight: 700; }
+.share-menu-error { margin: 0; padding: 6px 12px; color: var(--warm); font-size: 0.78rem; font-weight: 700; overflow-wrap: anywhere; }
+.share-menu-retry { min-height: auto; padding: 2px 10px; margin-left: 8px; font-size: 0.76rem; color: var(--text); background: rgba(255,255,255,0.1); border: 1px solid var(--line); border-radius: 999px; }
 .app-stats { display: none; gap: 8px; flex-wrap: wrap; justify-content: flex-end; color: var(--muted); font-size: 0.78rem; font-weight: 800; }
 .app-stats span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.06); }
 .hero { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 26px; border: 1px solid var(--line); border-radius: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); }
@@ -207,6 +213,12 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .help-content p { margin: 0; line-height: 1.5; }
 .gate { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
 .gate-card { width: min(620px, 100%); padding: 30px; display: grid; gap: 16px; }
+.share-page { min-height: 100svh; display: grid; place-items: center; padding: 20px; }
+.share-page-card { width: min(620px, 100%); padding: 30px; display: grid; gap: 14px; border: 1px solid var(--line); border-radius: 28px; background: var(--panel); box-shadow: 0 24px 70px rgba(0,0,0,0.28); backdrop-filter: blur(18px); }
+.share-page-card h1 { margin: 0; font-size: clamp(2rem, 8vw, 3.2rem); line-height: 1; letter-spacing: -0.05em; overflow-wrap: anywhere; }
+.share-page-card h2 { margin: 4px 0 0; font-size: 1rem; }
+.shared-artists { display: flex; flex-wrap: wrap; gap: 8px; }
+.shared-artist-chip { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text); font-weight: 800; font-size: 0.88rem; overflow-wrap: anywhere; }
 
 @media (max-width: 979px) {
   .workspace .side { order: -1; }

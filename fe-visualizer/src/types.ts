@@ -170,3 +170,18 @@ export type LikedTruck = {
   truck: LoveMobile;
   artists: string[];
 };
+
+export type SharedTruck = {
+  number: string;
+  name: string;
+  genres: string;
+  time: string;
+  artists: string[];
+};
+
+export type SharedPayload = {
+  username: string;
+  marked: string[];
+  likedTrucks: SharedTruck[];
+  likedArtists: string[];
+};

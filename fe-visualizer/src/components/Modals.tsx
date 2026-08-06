@@ -1,7 +1,6 @@
 import React from 'react';
 import {Truck} from 'lucide-react';
-import {loveMobileTitle, parseTimeRange, truckLabel, truckNumber} from '../loveMobile';
-import {buildShareLink} from '../share';
+import {loveMobileTitle, parseTimeRange, truckNumber} from '../loveMobile';
 import {ShareMenu} from './ShareMenu';
 import type {LayoutOptions} from '../layoutOptions';
 import type {LikedTruck, LoveMobile} from '../types';
@@ -238,16 +237,7 @@ export function TrainModelPrompt({count, onDismiss, onTrain}: {count: number; on
   );
 }
 
-export function LikedTrucksModal({trucks, onClose}: {trucks: LikedTruck[]; onClose: () => void}) {
-  const shareText = trucks.length
-    ? `My Street Parade 2026 love mobiles:\n\n${trucks.map((entry) => {
-        const parts = [truckLabel(entry.truck)];
-        if (entry.truck.name) parts.push(entry.truck.name);
-        if (entry.truck.genres) parts.push(entry.truck.genres);
-        if (entry.artists.length) parts.push(`Acts: ${entry.artists.join(', ')}`);
-        return parts.join(' · ');
-      }).join('\n')}`
-    : 'My Street Parade 2026 love mobiles: none yet.';
+export function LikedTrucksModal({trucks, onClose, onCreateShare}: {trucks: LikedTruck[]; onClose: () => void; onCreateShare: () => Promise<{link: string; text: string}>}) {
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="layout-modal liked-trucks-modal" role="dialog" aria-modal="true" aria-labelledby="liked-trucks-title">
@@ -258,14 +248,14 @@ export function LikedTrucksModal({trucks, onClose}: {trucks: LikedTruck[]; onClo
             <p>All trucks of acts you liked or are likely to like, with their set times.</p>
           </div>
           <div className="modal-header-actions">
-            <ShareMenu link={buildShareLink()} text={shareText} />
+            <ShareMenu onPrepare={onCreateShare} />
             <button type="button" className="secondary" onClick={onClose}>Close</button>
           </div>
         </div>
         {trucks.length ? (
           <ul className="liked-trucks-list">
             {trucks.map((entry, index) => (
-              <li key={entry.truck.uuid ?? `${entry.truck.number ?? entry.truck.source_index ?? index}-${truckLabel(entry.truck)}`}>
+              <li key={entry.truck.uuid ?? `${entry.truck.number ?? entry.truck.source_index ?? index}-${truckNumber(entry.truck)}`}>
                 <span className="liked-truck-number">#{truckNumber(entry.truck)}</span>
                 <span className="liked-truck-detail">
                   <strong>{loveMobileTitle(entry.truck)}</strong>
