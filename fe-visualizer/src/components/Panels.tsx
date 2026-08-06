@@ -122,7 +122,7 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
   }, [modelAvailable]);
   const visibleArtists = artists.filter((artist) => {
     if (filter === 'likely') return artist.likeScore > 0;
-    if (filter === 'unliked') return artist.predictedDown > artist.predictedUp;
+    if (filter === 'unliked') return artist.unlikeScore > 0;
     if (filter === 'liked') return artist.artistPreference === 'up';
     if (filter === 'manual') return Boolean(artist.artistPreference);
     return true;
@@ -172,6 +172,7 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
             )}
             <div className="artist-score-grid">
               <span>Like <b>{artist.likeScore.toFixed(2)}</b></span>
+              <span>Unlike <b>{artist.unlikeScore.toFixed(2)}</b></span>
               <span>Pred +{artist.predictedUp} / -{artist.predictedDown}</span>
               <span>{artist.trackCount} songs</span>
             </div>

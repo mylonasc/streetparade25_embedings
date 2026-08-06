@@ -63,6 +63,48 @@ describe('buildArtistSummaries like score', () => {
   });
 });
 
+describe('buildArtistSummaries unlike score', () => {
+  it('scores 1 for explicitly unliked songs and 1 - sigmoid for predicted songs, over track count', () => {
+    const points = [
+      trackPoint(1, 'Alice'), // actual down -> unlike +1
+      trackPoint(2, 'Alice'), // actual up -> unlike +0
+      trackPoint(3, 'Alice'), // predicted down, score 0.2 -> unlike +0.8
+      trackPoint(4, 'Alice'), // predicted up, score 0.8 -> unlike +0.2
+    ];
+    const result = buildArtistSummaries(points, {
+      'track:1': 'down',
+      'track:2': 'up',
+    }, {
+      'track:3': predicted('track:3', 0.2, 'down'),
+      'track:4': predicted('track:4', 0.8, 'up'),
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].unlikeScore).toBeCloseTo((1 + 0.8 + 0.2) / 4, 5);
+  });
+
+  it('ignores unlabeled songs in the unlike score', () => {
+    const points = [trackPoint(1, 'Bob'), trackPoint(2, 'Bob')];
+    const result = buildArtistSummaries(points, {}, {});
+    expect(result[0].unlikeScore).toBe(0);
+  });
+
+  it('clamps sigmoid scores in the unlike contribution', () => {
+    const points = [trackPoint(1, 'Carol')];
+    const result = buildArtistSummaries(points, {}, {
+      'track:1': predicted('track:1', 1.4, 'up'),
+    });
+    expect(result[0].unlikeScore).toBe(0);
+  });
+
+  it('classifies artists with any down signal as likely unliked', () => {
+    const points = [trackPoint(1, 'Dave')];
+    const result = buildArtistSummaries(points, {}, {
+      'track:1': predicted('track:1', 0.1, 'down'),
+    });
+    expect(result[0].unlikeScore).toBeGreaterThan(0);
+  });
+});
+
 describe('buildLikedTrucks truck score', () => {
   const truck = (number: number, name: string) => ({number, name});
   const artist = (overrides: Partial<ArtistSummary>): ArtistSummary => ({
@@ -75,6 +117,7 @@ describe('buildLikedTrucks truck score', () => {
     predictedUp: 0,
     predictedDown: 0,
     likeScore: 0,
+    unlikeScore: 0,
     artistPreference: null,
     loveMobiles: [],
     ...overrides,

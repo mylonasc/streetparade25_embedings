@@ -6,6 +6,7 @@ export function buildArtistSummaries(points: Point[], thumbPreferences: Record<s
   const artistPoints = new Map(points.filter((point) => point.kind === 'artist').map((point) => [point.label, point as PointLike]));
   const summaries = new Map<string, ArtistSummary>();
   const likeScoreSums = new Map<string, number>();
+  const unlikeScoreSums = new Map<string, number>();
   for (const point of points) {
     if (!['track', 'user_track'].includes(point.kind)) continue;
     const metadata = point.metadata || {};
@@ -22,6 +23,7 @@ export function buildArtistSummaries(points: Point[], thumbPreferences: Record<s
       predictedUp: 0,
       predictedDown: 0,
       likeScore: 0,
+      unlikeScore: 0,
       artistPreference: (thumbPreferences?.[preferenceKeyForPoint(artistPoint) ?? ''] as PreferenceValue | undefined) || null,
       loveMobiles: Array.isArray(artistPoint.metadata?.love_mobiles) ? artistPoint.metadata.love_mobiles : [],
     };
@@ -29,22 +31,31 @@ export function buildArtistSummaries(points: Point[], thumbPreferences: Record<s
     const predicted = predictedPreferences?.[preferenceKeyForPoint(point) ?? ''];
     summary.trackCount += 1;
     let contribution = 0;
+    let unlikeContribution = 0;
     if (actual === 'up') {
       summary.actualUp += 1;
       contribution = 1;
     } else if (actual === 'down') {
       summary.actualDown += 1;
+      unlikeContribution = 1;
     } else if (predicted?.value === 'up') {
       summary.predictedUp += 1;
       contribution = clamp01(predicted.score);
+      unlikeContribution = 1 - clamp01(predicted.score);
     } else if (predicted?.value === 'down') {
       summary.predictedDown += 1;
+      unlikeContribution = 1 - clamp01(predicted.score);
     }
     if (contribution > 0) likeScoreSums.set(artistName, (likeScoreSums.get(artistName) || 0) + contribution);
+    if (unlikeContribution > 0) unlikeScoreSums.set(artistName, (unlikeScoreSums.get(artistName) || 0) + unlikeContribution);
     summaries.set(artistName, summary);
   }
   return Array.from(summaries.values())
-    .map((summary) => ({...summary, likeScore: summary.trackCount ? (likeScoreSums.get(summary.name) || 0) / summary.trackCount : 0}))
+    .map((summary) => ({
+      ...summary,
+      likeScore: summary.trackCount ? (likeScoreSums.get(summary.name) || 0) / summary.trackCount : 0,
+      unlikeScore: summary.trackCount ? (unlikeScoreSums.get(summary.name) || 0) / summary.trackCount : 0,
+    }))
     .sort((a, b) => b.likeScore - a.likeScore || b.trackCount - a.trackCount || a.name.localeCompare(b.name));
 }
 

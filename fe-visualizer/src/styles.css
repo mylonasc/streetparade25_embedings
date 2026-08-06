@@ -183,7 +183,7 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .artist-favorite-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .artist-title { width: 100%; min-height: auto; padding: 0; color: var(--text); background: transparent; text-align: left; border-radius: 0; overflow-wrap: anywhere; }
 .artist-favorite-actions { display: flex; gap: 6px; }
-.artist-score-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.artist-score-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .artist-score-grid span { padding: 6px 8px; border-radius: 12px; color: var(--muted); background: rgba(255,255,255,0.055); font-size: 0.74rem; font-weight: 800; text-align: center; overflow-wrap: anywhere; }
 .artist-score-grid b { color: var(--accent); }
 .artist-love-mobiles { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -228,7 +228,9 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .share-page-card h1 { margin: 0; font-size: clamp(2rem, 8vw, 3.2rem); line-height: 1; letter-spacing: -0.05em; overflow-wrap: anywhere; }
 .share-page-card h2 { margin: 4px 0 0; font-size: 1rem; }
 .shared-artists { display: flex; flex-wrap: wrap; gap: 8px; }
-.shared-artist-chip { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text); font-weight: 800; font-size: 0.88rem; overflow-wrap: anywhere; }
+.shared-artist-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text); font-weight: 800; font-size: 0.88rem; overflow-wrap: anywhere; }
+.shared-artist-score { color: var(--accent); font-size: 0.76rem; font-weight: 800; white-space: nowrap; }
+.share-sort { display: flex; flex-wrap: wrap; gap: 8px; }
 
 @media (max-width: 979px) {
   .workspace .side { order: -1; }

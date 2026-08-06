@@ -221,7 +221,7 @@ export function App() {
       username,
       marked: Array.from(marks),
       likedTrucks: serializeLikedTrucks(likedTrucks),
-      likedArtists: likedArtistNames,
+      likedArtists,
     };
     const share = await request<{token: string}>('/shares', {
       method: 'POST',
@@ -509,8 +509,8 @@ export function App() {
   const preferenceTrainingSummary = useMemo(() => summarizeExamples(preferenceTrainingDataset.examples, preferenceTrainingDataset.unlabeled), [preferenceTrainingDataset]);
   const artistSummaries = useMemo(() => buildArtistSummaries(points, thumbPreferences, predictedPreferences), [points, thumbPreferences, predictedPreferences]);
   const likedTrucks = useMemo(() => buildLikedTrucks(artistSummaries), [artistSummaries]);
-  const likedArtistNames = useMemo(
-    () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.likeScore > 0).map((artist) => artist.name),
+  const likedArtists = useMemo(
+    () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.likeScore > 0).map((artist) => ({name: artist.name, score: artist.likeScore})),
     [artistSummaries],
   );
 

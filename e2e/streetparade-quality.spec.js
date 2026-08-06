@@ -38,6 +38,8 @@ const OVERLAP_GROUPS = [
   '.artist-favorites-empty',
   '.modal-header-actions',
   '.liked-trucks-list',
+  '.share-sort',
+  '.shared-artists',
   '.playlist',
   '.tooltip-actions',
 ];

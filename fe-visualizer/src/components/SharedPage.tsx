@@ -1,10 +1,15 @@
 import {MapPinned, Truck} from 'lucide-react';
+import {useState} from 'react';
 import {parseTimeRange} from '../loveMobile';
-import type {SharedPayload} from '../types';
+import type {SharedPayload, SharedTruck} from '../types';
+
+type TruckSort = 'score' | 'order';
 
 export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload; onEnter: () => void}) {
   const trucks = Array.isArray(payload.likedTrucks) ? payload.likedTrucks : [];
   const artists = Array.isArray(payload.likedArtists) ? payload.likedArtists : [];
+  const [sort, setSort] = useState<TruckSort>('score');
+  const sortedTrucks = [...trucks].sort(sort === 'score' ? byScore : byOrder);
   return (
     <main className="share-page">
       <section className="share-page-card">
@@ -13,24 +18,30 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
         <p className="muted">Street Parade 2026 acts this user liked or is likely to like, and the love mobiles where you can catch them.</p>
 
         <h2>Love mobiles</h2>
-        {trucks.length ? (
-          <ul className="liked-trucks-list">
-            {trucks.map((truck, index) => {
-              const range = parseTimeRange(truck.time);
-              return (
-                <li key={`${truck.number}-${index}`}>
-                  <span className="liked-truck-number">#{truck.number}</span>
-                  <span className="liked-truck-detail">
-                    <strong>{truck.name}</strong>
-                    {range && <span className="liked-truck-time">{range.start}–{range.end}</span>}
-                    {truck.genres && <span className="muted">{truck.genres}</span>}
-                    <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
-                    {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+        {sortedTrucks.length ? (
+          <>
+            <div className="share-sort" aria-label="Sort love mobiles">
+              <button type="button" className={sort === 'score' ? '' : 'secondary'} aria-pressed={sort === 'score'} onClick={() => setSort('score')}>Sort by score</button>
+              <button type="button" className={sort === 'order' ? '' : 'secondary'} aria-pressed={sort === 'order'} onClick={() => setSort('order')}>Sort by order</button>
+            </div>
+            <ul className="liked-trucks-list">
+              {sortedTrucks.map((truck, index) => {
+                const range = parseTimeRange(truck.time);
+                return (
+                  <li key={`${truck.number}-${index}`}>
+                    <span className="liked-truck-number">#{truck.number}</span>
+                    <span className="liked-truck-detail">
+                      <strong>{truck.name}</strong>
+                      {range && <span className="liked-truck-time">{range.start}–{range.end}</span>}
+                      {truck.genres && <span className="muted">{truck.genres}</span>}
+                      <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
+                      {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         ) : (
           <p className="muted">No love mobiles in this share.</p>
         )}
@@ -38,7 +49,16 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
         <h2>Acts</h2>
         {artists.length ? (
           <div className="shared-artists" aria-label="Liked acts">
-            {artists.map((name) => <span className="shared-artist-chip" key={name}>{name}</span>)}
+            {artists.map((entry) => {
+              const name = typeof entry === 'string' ? entry : entry.name;
+              const score = typeof entry === 'string' ? null : entry.score;
+              return (
+                <span className="shared-artist-chip" key={name}>
+                  {name}
+                  {score !== null && score !== undefined && Number.isFinite(score) && <span className="shared-artist-score">Like {formatScore(score)}</span>}
+                </span>
+              );
+            })}
           </div>
         ) : (
           <p className="muted">No liked acts in this share.</p>
@@ -48,6 +68,19 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
       </section>
     </main>
   );
+}
+
+function byScore(a: SharedTruck, b: SharedTruck): number {
+  return b.score - a.score || numericTruckNumber(a) - numericTruckNumber(b);
+}
+
+function byOrder(a: SharedTruck, b: SharedTruck): number {
+  return numericTruckNumber(a) - numericTruckNumber(b) || b.score - a.score;
+}
+
+function numericTruckNumber(truck: SharedTruck): number {
+  const parsed = Number(truck.number);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function formatScore(score: number | null | undefined): string {
