@@ -9,12 +9,16 @@
     "preview": "vite preview --host 0.0.0.0 --port 4174",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "check:lock": "npx -y npm@10.9.8 ci --omit=dev --dry-run"
   },
   "dependencies": {
+    "@emnapi/core": "^2.0.0-alpha.3",
+    "@emnapi/runtime": "^2.0.0-alpha.3",
     "@tensorflow/tfjs": "^4.22.0",
     "@vitejs/plugin-react": "6.0.5",
     "d3": "7.9.0",
+    "lucide-react": "^1.29.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "vite": "8.2.0"
