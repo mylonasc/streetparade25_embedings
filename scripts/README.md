@@ -67,3 +67,33 @@ uv run python scripts/build_embedding_visualization.py \
 ```
 
 `site/` and `scripts/.data_cache/*.json` are ignored because they are generated outputs.
+
+## DockerHub Images
+
+Build the test or prod DockerHub images locally with the same tags the CI
+workflows publish (`publish-dockerhub.yml` for prod, `publish-dockerhub-test.yml`
+for test). Versions are read from `pyproject.toml` and `fe-visualizer/package.json`;
+the short SHA comes from `git rev-parse --short=12 HEAD`.
+
+```bash
+uv run python scripts/build_push_image.py --env test --dry-run   # show the commands
+uv run python scripts/build_push_image.py --env prod             # build prod tags
+uv run python scripts/build_push_image.py --env prod --push      # build and push
+```
+
+Options:
+
+- `--env test|prod` (required): `test` tags `<version>` and `<version>-<sha>`;
+  `prod` tags `<minor>`, `<minor>-<sha>`, `<version>` and `<version>-<sha>`
+  (plus the path-locked `visualizer-minimal-*`).
+- `--component api|visualizer|visualizer-minimal|all` (default `all`):
+  `visualizer-minimal` is prod-only.
+- `--repo USER/REPO` (default `$DOCKERHUB_REPOSITORY` or `mylonasc/magarathea`).
+- `--push`: push the tags to DockerHub after building. Log in first with
+  `docker login`.
+
+Image names are exact mirrors of the CI tags — `api-minimal-<version>` /
+`visualizer-<version>` for both test and prod (the `--env` only changes which
+tag variants are produced). Note that test-branch pushes and main pushes both
+write the mutable `<version>` tag; prefer the `<version>-<sha>` tags for an
+immutable reference.

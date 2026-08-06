@@ -60,7 +60,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push test API
+      - name: Build and push minimal API
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -72,10 +72,10 @@ jobs:
             ENABLE_SONG_DL_AND_EMBEDINGS=0
             STREETPARADE_VECTOR_STORE=numpy
           tags: |
-            ${{ env.DOCKERHUB_REPOSITORY }}:api-test-${{ steps.versions.outputs.backend_version }}
-            ${{ env.DOCKERHUB_REPOSITORY }}:api-test-${{ steps.versions.outputs.backend_version }}-${{ steps.versions.outputs.short_sha }}
+            ${{ env.DOCKERHUB_REPOSITORY }}:api-minimal-${{ steps.versions.outputs.backend_version }}
+            ${{ env.DOCKERHUB_REPOSITORY }}:api-minimal-${{ steps.versions.outputs.backend_version }}-${{ steps.versions.outputs.short_sha }}
           labels: |
-            org.opencontainers.image.title=streetparade-api-test
+            org.opencontainers.image.title=streetparade-api-minimal
             org.opencontainers.image.version=${{ steps.versions.outputs.backend_version }}
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -91,10 +91,10 @@ jobs:
             VITE_BASE_PATH=./
 
           tags: |
-            ${{ env.DOCKERHUB_REPOSITORY }}:visualizer-test-${{ steps.versions.outputs.frontend_version }}
-            ${{ env.DOCKERHUB_REPOSITORY }}:visualizer-test-${{ steps.versions.outputs.frontend_version }}-${{ steps.versions.outputs.short_sha }}
+            ${{ env.DOCKERHUB_REPOSITORY }}:visualizer-${{ steps.versions.outputs.frontend_version }}
+            ${{ env.DOCKERHUB_REPOSITORY }}:visualizer-${{ steps.versions.outputs.frontend_version }}-${{ steps.versions.outputs.short_sha }}
           labels: |
-            org.opencontainers.image.title=streetparade-visualizer-test
+            org.opencontainers.image.title=streetparade-visualizer
             org.opencontainers.image.version=${{ steps.versions.outputs.frontend_version }}
             org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

@@ -368,18 +368,21 @@ mirroring the deployed topology. Open `http://<lan-ip>:3001` on the phone.
 - Image tags on DockerHub `mylonasc/magarathea` (private repo, pulls need the
   `dockerhub-regcred` secret): `api-minimal-*`, `visualizer-minimal-*` (path-locked
   navigator2026 build) and `visualizer-*` (path-agnostic) from
-  `publish-dockerhub.yml`; `*-test-*` from `publish-dockerhub-test.yml`.
+  `publish-dockerhub.yml`; both the prod and test charts use the same
+  `api-minimal-*` / `visualizer-*` families, with the test variants
+  (`<version>-<sha>`) built by `publish-dockerhub-test.yml`.
 - The deployed prod chart (`deploy/helm/sp26-emb-prod`) serves the path-agnostic
-  **`visualizer-*`** image; the test chart (`sp26-emb-test`) serves the **`*-test-*`**
-  image. Both are built from `fe-visualizer/Dockerfile` with `VITE_BASE_PATH=./`, which
-  is what makes them work at any base path — the path-locked `visualizer-minimal-*`
-  image is not. Do not point the charts at a path-locked image.
+  **`visualizer-*`** image; the test chart (`sp26-emb-test`) serves the same
+  **`visualizer-*`** family. Both are built from `fe-visualizer/Dockerfile` with
+  `VITE_BASE_PATH=./`, which is what makes them work at any base path — the
+  path-locked `visualizer-minimal-*` image is not. Do not point the charts at a
+  path-locked image.
 - When you change frontend code that should reach the deployed sites: the prod
   `visualizer-*` image is built by `publish-dockerhub.yml` after CI on `main` (or
-  manual `workflow_dispatch`); the `*-test-*` image is built by
-  `publish-dockerhub-test.yml` on push to branch `feat/sp26-test-env` (or manual
-  `workflow_dispatch`); then bump the chart version + image tag and `helm upgrade`
-  per `docs/cluster-setup.md`.
+  manual `workflow_dispatch`); the test `visualizer-<version>-<sha>` image is
+  built by `publish-dockerhub-test.yml` on push to branch `feat/sp26-test-env`
+  (or manual `workflow_dispatch`); then bump the chart version + image tag and
+  `helm upgrade` per `docs/cluster-setup.md`.
 
 ## Gotchas (learned the hard way)
 
