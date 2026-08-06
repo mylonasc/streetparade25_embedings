@@ -21,8 +21,8 @@ How the SP26 deployments run on the `magarathea.ddns.net` Kubernetes cluster, as
 |-----------------|------------------------------------------------------------------|
 | Namespace       | `sp26-emb-live`                                                  |
 | Helm release    | `sp26-emb-live` (chart `deploy/helm/sp26-emb-prod`, revision 2)  |
-| Visualizer      | `mylonasc/magarathea:visualizer-test-0.1.3` (ClusterIP :80)      |
-| API             | `mylonasc/magarathea:api-test-0.1.3` (ClusterIP :8000)           |
+| Visualizer      | `mylonasc/magarathea:visualizer-0.1.3` (ClusterIP :80)      |
+| API             | `mylonasc/magarathea:api-minimal-0.1.3` (ClusterIP :8000)           |
 | PVC             | `sp26-emb-data` (2Gi, `standard-rwo`), mounted at `/data` in API |
 | Ingresses       | `sp26-emb-navigator-ui`, `sp26-emb-navigator-api`, `sp26-emb-navigator-ui-redirect` |
 
@@ -89,9 +89,9 @@ therefore works at any base path, which is why the UI/assets use relative URLs
 The path-locked builds (`fe-visualizer/Dockerfile.navigator2026` /
 `visualizer-minimal-*`) are **not** compatible with the chart ingresses: after the
 rewrite they would serve their `location = /` health response as a non-HTML body and the
-browser would download it. Until `publish-dockerhub.yml` builds the visualizer from
-`fe-visualizer/Dockerfile`, the live deployment keeps the `*-test-*` tags built by
-`publish-dockerhub-test.yml` (the API `*-test-*` build is identical to the minimal one).
+browser would download it. The live deployment therefore uses the path-agnostic
+`visualizer-*` image built by `publish-dockerhub.yml` from `fe-visualizer/Dockerfile`
+with `VITE_BASE_PATH=./`.
 
 ## TLS
 
@@ -116,7 +116,8 @@ TLS is host-level and shared — there is no per-namespace certificate.
 - Each SP26 namespace contains a `dockerhub-regcred` (`kubernetes.io/dockerconfigjson`)
   secret holding a Docker Hub personal-access token, attached to the `default` service
   account via `imagePullSecrets`.
-- `publish-dockerhub.yml` builds the `*-minimal-*` tags; `publish-dockerhub-test.yml`
+- `publish-dockerhub.yml` builds the `api-minimal-*`, `visualizer-minimal-*`
+  (path-locked) and `visualizer-*` (path-agnostic) tags; `publish-dockerhub-test.yml`
   builds the `*-test-*` tags.
 
 ## Data

@@ -2,7 +2,7 @@
 
 This chart deploys the Street Parade 26 embedding visualizer into the `sp26-prod` namespace, served under the `/sp26-prod` path on `magarathea.ddns.net`. It is an isolated staging copy of the `sp26-emb` chart used to validate the target production configuration; it does not touch the production deployment in `sp26-dev`.
 
-It uses the path-agnostic `visualizer-test-*` and `api-test-*` images published by the `publish-dockerhub-test.yml` workflow.
+It uses the path-agnostic `visualizer-*` image and the `api-minimal-*` image published by the `publish-dockerhub.yml` workflow.
 
 It deploys:
 
@@ -33,14 +33,14 @@ Example tags for version `0.1.0`:
 
 ```text
 your-dockerhub-user/your-single-repo:api-minimal-0.1.0
-your-dockerhub-user/your-single-repo:visualizer-minimal-0.1.0
+your-dockerhub-user/your-single-repo:visualizer-0.1.0
 ```
 
 For Kubernetes production rollouts, prefer SHA-qualified tags from CI:
 
 ```text
 your-dockerhub-user/your-single-repo:api-minimal-0.1.0-<short_sha>
-your-dockerhub-user/your-single-repo:visualizer-minimal-0.1.0-<short_sha>
+your-dockerhub-user/your-single-repo:visualizer-0.1.0-<short_sha>
 ```
 
 ## Prepare Runtime Data
@@ -83,7 +83,7 @@ api:
 
 visualizer:
   image:
-    tag: visualizer-minimal-0.1.0
+    tag: visualizer-0.1.0
   service:
     type: LoadBalancer
 
@@ -101,7 +101,7 @@ api:
 
 visualizer:
   image:
-    tag: visualizer-minimal-0.1.0-<short_sha>
+    tag: visualizer-0.1.0-<short_sha>
 ```
 
 ## Install Or Upgrade

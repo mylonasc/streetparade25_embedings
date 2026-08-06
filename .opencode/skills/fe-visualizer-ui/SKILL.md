@@ -366,16 +366,20 @@ mirroring the deployed topology. Open `http://<lan-ip>:3001` on the phone.
   published path-agnostic image overrides to `./`), `VITE_ENABLE_SONG_DL_AND_EMBEDINGS`
   (default `false`).
 - Image tags on DockerHub `mylonasc/magarathea` (private repo, pulls need the
-  `dockerhub-regcred` secret): `visualizer-minimal-*`/`api-minimal-*` from
-  `publish-dockerhub.yml` and `*-test-*` from `publish-dockerhub-test.yml`.
-- The deployed Helm charts (`deploy/helm/sp26-emb-prod`, `sp26-emb-test`) serve
-  the **`*-test-*`** visualizer image on purpose: it is the path-agnostic build
-  (`VITE_BASE_PATH=./`), which the path-locked `visualizer-minimal-*` image is not.
-  Do not point the charts at a path-locked image.
-- When you change frontend code that should reach the deployed sites, the
-  `*-test-*` image is built by `publish-dockerhub-test.yml` on push to branch
-  `feat/sp26-test-env` (or manual `workflow_dispatch`); then bump the chart
-  version + image tag and `helm upgrade` per `docs/cluster-setup.md`.
+  `dockerhub-regcred` secret): `api-minimal-*`, `visualizer-minimal-*` (path-locked
+  navigator2026 build) and `visualizer-*` (path-agnostic) from
+  `publish-dockerhub.yml`; `*-test-*` from `publish-dockerhub-test.yml`.
+- The deployed prod chart (`deploy/helm/sp26-emb-prod`) serves the path-agnostic
+  **`visualizer-*`** image; the test chart (`sp26-emb-test`) serves the **`*-test-*`**
+  image. Both are built from `fe-visualizer/Dockerfile` with `VITE_BASE_PATH=./`, which
+  is what makes them work at any base path — the path-locked `visualizer-minimal-*`
+  image is not. Do not point the charts at a path-locked image.
+- When you change frontend code that should reach the deployed sites: the prod
+  `visualizer-*` image is built by `publish-dockerhub.yml` after CI on `main` (or
+  manual `workflow_dispatch`); the `*-test-*` image is built by
+  `publish-dockerhub-test.yml` on push to branch `feat/sp26-test-env` (or manual
+  `workflow_dispatch`); then bump the chart version + image tag and `helm upgrade`
+  per `docs/cluster-setup.md`.
 
 ## Gotchas (learned the hard way)
 
