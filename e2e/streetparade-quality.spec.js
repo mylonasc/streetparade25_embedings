@@ -39,6 +39,7 @@ const OVERLAP_GROUPS = [
   '.modal-header-actions',
   '.liked-trucks-list',
   '.share-sort',
+  '.share-score-filter',
   '.shared-artists',
   '.playlist',
   '.tooltip-actions',

@@ -9,7 +9,9 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
   const trucks = Array.isArray(payload.likedTrucks) ? payload.likedTrucks : [];
   const artists = Array.isArray(payload.likedArtists) ? payload.likedArtists : [];
   const [sort, setSort] = useState<TruckSort>('score');
-  const sortedTrucks = [...trucks].sort(sort === 'score' ? byScore : byOrder);
+  const [minScore, setMinScore] = useState(0);
+  const filteredTrucks = trucks.filter((truck) => truck.score >= minScore);
+  const sortedTrucks = [...filteredTrucks].sort(sort === 'score' ? byScore : byOrder);
   return (
     <main className="share-page">
       <section className="share-page-card">
@@ -18,29 +20,37 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
         <p className="muted">Street Parade 2026 acts this user liked or is likely to like, and the love mobiles where you can catch them.</p>
 
         <h2>Love mobiles</h2>
-        {sortedTrucks.length ? (
+        {trucks.length ? (
           <>
             <div className="share-sort" aria-label="Sort love mobiles">
               <button type="button" className={sort === 'score' ? '' : 'secondary'} aria-pressed={sort === 'score'} onClick={() => setSort('score')}>Sort by score</button>
               <button type="button" className={sort === 'order' ? '' : 'secondary'} aria-pressed={sort === 'order'} onClick={() => setSort('order')}>Sort by order</button>
             </div>
-            <ul className="liked-trucks-list">
-              {sortedTrucks.map((truck, index) => {
-                const range = parseTimeRange(truck.time);
-                return (
-                  <li key={`${truck.number}-${index}`}>
-                    <span className="liked-truck-number">#{truck.number}</span>
-                    <span className="liked-truck-detail">
-                      <strong>{truck.name}</strong>
-                      {range && <span className="liked-truck-time">{range.start}–{range.end}</span>}
-                      {truck.genres && <span className="muted">{truck.genres}</span>}
-                      <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
-                      {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+            <label className="share-score-filter">
+              <span>Minimum score <b>{formatScore(minScore)}</b></span>
+              <input type="range" min="0" max="1" step="0.05" value={minScore} aria-label="Minimum truck score" onChange={(event) => setMinScore(Number(event.target.value))} />
+            </label>
+            {sortedTrucks.length ? (
+              <ul className="liked-trucks-list">
+                {sortedTrucks.map((truck, index) => {
+                  const range = parseTimeRange(truck.time);
+                  return (
+                    <li key={`${truck.number}-${index}`}>
+                      <span className="liked-truck-number">#{truck.number}</span>
+                      <span className="liked-truck-detail">
+                        <strong>{truck.name}</strong>
+                        {range && <span className="liked-truck-time">{range.start}–{range.end}</span>}
+                        {truck.genres && <span className="muted">{truck.genres}</span>}
+                        <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
+                        {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="muted">No love mobiles at or above {formatScore(minScore)}.</p>
+            )}
           </>
         ) : (
           <p className="muted">No love mobiles in this share.</p>

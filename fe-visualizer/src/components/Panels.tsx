@@ -172,7 +172,7 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
             )}
             <div className="artist-score-grid">
               <span>Like <b>{artist.likeScore.toFixed(2)}</b></span>
-              <span>Unlike <b>{artist.unlikeScore.toFixed(2)}</b></span>
+              <span className="artist-score-unlike">Unlike <b>{artist.unlikeScore.toFixed(2)}</b></span>
               <span>Pred +{artist.predictedUp} / -{artist.predictedDown}</span>
               <span>{artist.trackCount} songs</span>
             </div>

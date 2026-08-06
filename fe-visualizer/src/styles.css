@@ -186,6 +186,7 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .artist-score-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .artist-score-grid span { padding: 6px 8px; border-radius: 12px; color: var(--muted); background: rgba(255,255,255,0.055); font-size: 0.74rem; font-weight: 800; text-align: center; overflow-wrap: anywhere; }
 .artist-score-grid b { color: var(--accent); }
+.artist-score-unlike b { color: var(--warm); }
 .artist-love-mobiles { display: flex; flex-wrap: wrap; gap: 6px; }
 .love-mobile-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 11px; border-radius: 999px; color: var(--accent); background: rgba(255,255,255,0.06); border: 1px solid var(--line); font-size: 0.76rem; font-weight: 800; }
 .love-mobile-chip svg { width: 16px; height: 16px; flex: none; }
@@ -231,6 +232,9 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .shared-artist-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.06); color: var(--text); font-weight: 800; font-size: 0.88rem; overflow-wrap: anywhere; }
 .shared-artist-score { color: var(--accent); font-size: 0.76rem; font-weight: 800; white-space: nowrap; }
 .share-sort { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-score-filter { display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; font-weight: 800; }
+.share-score-filter b { color: var(--accent); }
+.share-score-filter input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 @media (max-width: 979px) {
   .workspace .side { order: -1; }
