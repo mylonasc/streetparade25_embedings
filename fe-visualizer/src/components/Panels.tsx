@@ -1,5 +1,5 @@
-import {Star, ThumbsDown, ThumbsUp, Truck} from 'lucide-react';
-import React, {useState} from 'react';
+import {Heart, Star, ThumbsDown, ThumbsUp, Truck} from 'lucide-react';
+import React, {useEffect, useRef, useState} from 'react';
 import type {Evaluation, LossPoint, TrainingOptions} from '../preferenceTraining';
 import {summarizeExamples} from '../preferenceTraining';
 import {parseTimeRange, truckLabel, truckNumber} from '../loveMobile';
@@ -100,14 +100,24 @@ export function TrainingCurve({history}: {history: LossPoint[]}) {
   );
 }
 
-export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvailable, onShowLoveMobile}: {
+export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvailable, onShowLoveMobile, onShowLikedTrucks, onTrain, trainingBusy}: {
   artists: ArtistSummary[];
   onPreference: (point: PointLike, value: PreferenceValue) => void;
   onSelect: (point: PointLike) => void;
   modelAvailable: boolean;
   onShowLoveMobile: (loveMobile: LoveMobile) => void;
+  onShowLikedTrucks: () => void;
+  onTrain: () => void;
+  trainingBusy: boolean;
 }) {
   const [filter, setFilter] = useState(modelAvailable ? 'likely' : 'liked');
+  const modelJustAppeared = useRef(false);
+  useEffect(() => {
+    if (modelAvailable && !modelJustAppeared.current) {
+      modelJustAppeared.current = true;
+      setFilter('likely');
+    }
+  }, [modelAvailable]);
   const visibleArtists = artists.filter((artist) => {
     if (filter === 'likely') return artist.predictedUp > artist.predictedDown;
     if (filter === 'unliked') return artist.predictedDown > artist.predictedUp;
@@ -115,9 +125,16 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
     if (filter === 'manual') return Boolean(artist.artistPreference);
     return true;
   });
+  const showTrainingEmptyState = filter === 'likely' && visibleArtists.length === 0 && !modelAvailable;
   return (
     <section className="panel artist-favorites-panel">
-      <h2>Artist favorites</h2>
+      <div className="panel-title-row">
+        <h2>Artist favorites</h2>
+        <button type="button" className="secondary icon-button truck-heart-button" aria-label="Show loved trucks" onClick={onShowLikedTrucks} title="Show the love mobiles of liked and likely-liked acts">
+          <Truck size={18} aria-hidden="true" />
+          <Heart size={12} aria-hidden="true" className="truck-heart-badge" />
+        </button>
+      </div>
       <p className="muted">Rank artists by actual and predicted song preferences, then mark artists liked or unliked.</p>
       <select value={filter} onChange={(event) => setFilter(event.target.value)}>
         <option value="all">All artists</option>
@@ -156,7 +173,16 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
           </article>
         ))}
       </div>
-      {!visibleArtists.length && <p className="muted">No artists match this filter.</p>}
+      {!visibleArtists.length && (
+        showTrainingEmptyState ? (
+          <div className="artist-favorites-empty">
+            <p>No likely-liked artists yet. The preference model has not been trained in this browser, so there are no predicted favorites to show.</p>
+            <button type="button" onClick={onTrain} disabled={trainingBusy}>{trainingBusy ? 'Working...' : 'Train model'}</button>
+          </div>
+        ) : (
+          <p className="muted">No artists match this filter.</p>
+        )
+      )}
     </section>
   );
 }

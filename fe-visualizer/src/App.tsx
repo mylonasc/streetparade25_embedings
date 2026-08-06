@@ -12,13 +12,15 @@ import {buildSearchIndex, searchResults} from './search';
 import {playlistForPoint, preferenceKeyForPoint, preferenceTarget} from './selection';
 import {MARKS_KEY, USERNAME_KEY, readMarks, safeGetItem, safeSetItem} from './storage';
 import {useMobileViewport} from './responsive';
+import {truckNumber} from './loveMobile';
 import {BottomSheet} from './BottomSheet';
 import {Visualizer} from './components/Visualizer';
 import {Selection} from './components/Selection';
-import {HelpModal, LayoutModal, LoveMobileModal, SavedModelPrompt, TrainModelPrompt} from './components/Modals';
+import {HelpModal, LayoutModal, LikedTrucksModal, LoveMobileModal, SavedModelPrompt, TrainModelPrompt} from './components/Modals';
 import {ArtistFavoritesPanel, PreferenceTrainingPanel, TrackRow, UsernameGate} from './components/Panels';
+import {ShareMenu} from './components/ShareMenu';
 import type {
-  ArtistSummary, Job, LayoutJob, LoveMobile, Point, PointLike, Prediction, PreferenceValue, SimilarityEdge,
+  ArtistSummary, Job, LayoutJob, LikedTruck, LoveMobile, Point, PointLike, Prediction, PreferenceValue, SimilarityEdge,
   Stats, UserTrack, VisualizationFeatures, VisualizationPayload,
 } from './types';
 
@@ -108,6 +110,7 @@ export function App() {
   const [colorByPredictedPreference, setColorByPredictedPreference] = useState(false);
   const [visualizationLoading, setVisualizationLoading] = useState(false);
   const [activeLoveMobile, setActiveLoveMobile] = useState<LoveMobile | null>(null);
+  const [showLikedTrucks, setShowLikedTrucks] = useState(false);
 
   async function loadAll(activeUsername = username): Promise<void> {
     if (!activeUsername) return;
@@ -458,6 +461,20 @@ export function App() {
   const preferenceTrainingDataset = useMemo(() => buildPreferenceDataset(embeddedTracks, thumbPreferences), [embeddedTracks, thumbPreferences]);
   const preferenceTrainingSummary = useMemo(() => summarizeExamples(preferenceTrainingDataset.examples, preferenceTrainingDataset.unlabeled), [preferenceTrainingDataset]);
   const artistSummaries = useMemo(() => buildArtistSummaries(points, thumbPreferences, predictedPreferences), [points, thumbPreferences, predictedPreferences]);
+  const likedTrucks = useMemo(() => {
+    const trucks = new Map<string, LikedTruck>();
+    for (const artist of artistSummaries) {
+      const isLoved = artist.artistPreference === 'up' || artist.predictedUp > artist.predictedDown;
+      if (!isLoved) continue;
+      for (const truck of artist.loveMobiles) {
+        const key = truck.uuid ?? `${truck.number ?? truck.source_index ?? truck.name ?? truck.title}`;
+        const existing = trucks.get(key);
+        if (existing) existing.artists.push(artist.name);
+        else trucks.set(key, {truck, artists: [artist.name]});
+      }
+    }
+    return Array.from(trucks.values()).sort((a, b) => String(truckNumber(a.truck)).localeCompare(String(truckNumber(b.truck)), undefined, {numeric: true}));
+  }, [artistSummaries]);
 
   async function loadEmbeddedTracks(): Promise<EmbeddedTrack[]> {
     const tracks: EmbeddedTrack[] = [];
@@ -559,9 +576,12 @@ export function App() {
           <p className="eyebrow">Street Parade map</p>
           <h1>Embedding visualizer</h1>
         </div>
-        <div className="app-stats" aria-label="Map statistics">
-          <span>{stats.point_count} points</span>
-          <span>{stats.user_point_count} uploads</span>
+        <div className="app-bar-actions">
+          <div className="app-stats" aria-label="Map statistics">
+            <span>{stats.point_count} points</span>
+            <span>{stats.user_point_count} uploads</span>
+          </div>
+          <ShareMenu />
         </div>
       </header>
       {(message || error) && <section className={`notice ${error ? 'error' : 'success'}`}>{error || message}</section>}
@@ -710,7 +730,7 @@ export function App() {
           )}
           {sideTab === 'tracks' && !songDownloadsEnabled && !isMobile && <section className="panel"><h2>My songs</h2><p className="muted">Song downloads and embeddings are disabled on this deployment.</p></section>}
           {sideTab === 'training' && <PreferenceTrainingPanel options={preferenceTrainingOptions} setOptions={setPreferenceTrainingOptions} summary={preferenceTrainingSummary} status={preferenceTrainingStatus} busy={preferenceTrainingBusy} lossHistory={preferenceLossHistory} evaluation={preferenceEvaluation} evaluationSplit={preferenceEvaluationSplit} setEvaluationSplit={setPreferenceEvaluationSplit} onRefreshPreferences={refreshPreferenceData} onTrain={trainPreferenceColorModel} onLoadModel={loadPreferenceColorModel} />}
-          {sideTab === 'artists' && <ArtistFavoritesPanel artists={artistSummaries} onPreference={setArtistPreference} onSelect={(point) => selectPoint(point, {focus: true})} modelAvailable={Object.keys(predictedPreferences).length > 0} onShowLoveMobile={setActiveLoveMobile} />}
+          {sideTab === 'artists' && <ArtistFavoritesPanel artists={artistSummaries} onPreference={setArtistPreference} onSelect={(point) => selectPoint(point, {focus: true})} modelAvailable={Object.keys(predictedPreferences).length > 0} onShowLoveMobile={setActiveLoveMobile} onShowLikedTrucks={() => setShowLikedTrucks(true)} onTrain={() => void trainPreferenceColorModel()} trainingBusy={preferenceTrainingBusy} />}
         </aside>
       </section>
       {showLayoutModal && <LayoutModal layoutOptions={layoutOptions} setLayoutOptions={setLayoutOptions} recomputeLayout={recomputeLayout} onClose={() => setShowLayoutModal(false)} />}
@@ -718,6 +738,7 @@ export function App() {
       {showSavedModelPrompt && <SavedModelPrompt onLoad={loadPreferenceColorModel} onClose={() => setShowSavedModelPrompt(false)} busy={preferenceTrainingBusy} />}
       {showTrainPrompt && <TrainModelPrompt count={preferenceRegistrationCount} onDismiss={() => setShowTrainPrompt(false)} onTrain={handleTrainPromptTrain} />}
       {activeLoveMobile && <LoveMobileModal loveMobile={activeLoveMobile} onClose={() => setActiveLoveMobile(null)} />}
+      {showLikedTrucks && <LikedTrucksModal trucks={likedTrucks} onClose={() => setShowLikedTrucks(false)} />}
     </main>
   );
 }

@@ -17,6 +17,8 @@ const DEVICES = [
 // Containers whose direct children are laid out in a row/grid and must not overlap.
 const OVERLAP_GROUPS = [
   '.app-bar',
+  '.app-bar-actions',
+  '.share-menu-dropdown',
   '.map-search',
   '.search-input-row',
   '.cluster-select-row',
@@ -32,6 +34,9 @@ const OVERLAP_GROUPS = [
   '.training-options',
   '.artist-favorite-actions',
   '.artist-love-mobiles',
+  '.artist-favorites-empty',
+  '.modal-header-actions',
+  '.liked-trucks-list',
   '.playlist',
   '.tooltip-actions',
 ];
@@ -187,6 +192,13 @@ for (const device of DEVICES) {
       await expect(page.locator('.cluster-select-row select')).toBeVisible();
       await runChecks(page, slug, '02-map');
 
+      await page.locator('.app-bar').getByRole('button', { name: 'Share' }).click();
+      await expect(page.locator('.share-menu-dropdown')).toBeVisible();
+      await runChecks(page, slug, '02b-share-menu');
+      await page.getByRole('menuitem', { name: 'Copy link' }).click();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.share-menu-dropdown')).toBeHidden();
+
       await page.getByPlaceholder('Search artists, tracks, URLs...').fill(searchTerm);
       await expect(page.locator('.search-results button').first()).toBeVisible();
       await runChecks(page, slug, '03-search');
@@ -207,6 +219,16 @@ for (const device of DEVICES) {
       await page.locator('.side-tabs').getByRole('button', { name: 'Artists' }).click();
       await expect(page.locator('.artist-favorites-panel')).toBeVisible();
       await runChecks(page, slug, '06-artists');
+
+      await page.locator('.artist-favorites-panel select').selectOption('likely');
+      await expect(page.locator('.artist-favorites-empty')).toBeVisible();
+      await runChecks(page, slug, '06b-likely-empty');
+
+      await page.locator('.artist-favorites-panel').getByRole('button', { name: 'Show loved trucks' }).click();
+      await expect(page.locator('.liked-trucks-modal')).toBeVisible();
+      await runChecks(page, slug, '06c-loved-trucks-modal');
+      await page.getByRole('button', { name: 'Close' }).click();
+      await expect(page.locator('.liked-trucks-modal')).toBeHidden();
 
       await page.locator('.artist-favorites-panel select').selectOption('all');
       const truckChip = page.locator('.love-mobile-chip').first();

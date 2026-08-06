@@ -27,6 +27,12 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .shell { width: 100%; min-height: 100svh; margin: 0 auto; padding: 10px 10px calc(var(--sheet-peek) + 20px + env(safe-area-inset-bottom)); overflow-x: hidden; }
 .app-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: calc(12px + env(safe-area-inset-top)) 4px 8px; }
 .app-bar h1 { margin: 0; font-size: clamp(1.55rem, 8vw, 3.8rem); line-height: 0.95; letter-spacing: -0.07em; }
+.app-bar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.share-menu { position: relative; }
+.share-menu-dropdown { position: absolute; z-index: 25; top: calc(100% + 8px); right: 0; display: grid; gap: 4px; min-width: 220px; padding: 8px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel-strong); box-shadow: 0 18px 50px rgba(0,0,0,0.45); }
+.share-menu-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 12px; color: var(--text); text-align: left; font-size: 0.9rem; font-weight: 800; }
+.share-menu-row svg { width: 20px; height: 20px; flex: none; }
+.share-menu-row:hover, .share-menu-row:focus-visible { background: rgba(255,255,255,0.07); }
 .app-stats { display: none; gap: 8px; flex-wrap: wrap; justify-content: flex-end; color: var(--muted); font-size: 0.78rem; font-weight: 800; }
 .app-stats span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.06); }
 .hero { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 26px; border: 1px solid var(--line); border-radius: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); }
@@ -153,6 +159,12 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .training-metrics span, .mini-confusion span { padding: 8px; border-radius: 12px; color: var(--muted); background: rgba(255,255,255,0.055); font-size: 0.78rem; font-weight: 800; }
 .training-metrics b, .mini-confusion b { display: block; color: var(--text); font-size: 1rem; }
 .artist-favorites-panel { display: grid; gap: 10px; }
+.panel-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.panel-title-row h2 { margin: 0; }
+.truck-heart-button { position: relative; }
+.truck-heart-button .truck-heart-badge { position: absolute; right: 5px; bottom: 6px; color: var(--accent); }
+.artist-favorites-empty { display: grid; gap: 10px; padding: 14px; border: 1px dashed var(--line); border-radius: 18px; background: rgba(255,255,255,0.04); }
+.artist-favorites-empty p { margin: 0; }
 .artist-favorites-list { display: grid; gap: 10px; max-height: 620px; overflow: auto; }
 .artist-favorite-row { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.055); }
 .artist-title { width: 100%; min-height: auto; padding: 0; color: var(--text); background: transparent; text-align: left; border-radius: 0; overflow-wrap: anywhere; }
@@ -167,6 +179,12 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .love-mobile-modal .love-mobile-content p { margin: 0; display: grid; gap: 2px; line-height: 1.5; overflow-wrap: anywhere; }
 .love-mobile-modal .love-mobile-content strong { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .love-mobile-modal .love-mobile-description { color: var(--text); }
+.modal-header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.liked-trucks-list { display: grid; gap: 10px; max-height: 52vh; overflow: auto; padding: 0; margin: 0; list-style: none; }
+.liked-trucks-list li { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.055); }
+.liked-truck-number { color: var(--accent); font-weight: 900; font-size: 1.05rem; flex: none; }
+.liked-truck-detail { display: grid; gap: 3px; min-width: 0; }
+.liked-truck-time { color: var(--text); font-weight: 800; font-size: 0.9rem; }
 .layout-controls { display: grid; gap: 10px; }
 .layout-controls label { display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; font-weight: 800; }
 .layout-controls button { margin-top: 4px; }

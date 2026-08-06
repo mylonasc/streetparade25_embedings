@@ -165,3 +165,8 @@ export type ArtistSummary = {
   artistPreference: PreferenceValue | null;
   loveMobiles: LoveMobile[];
 };
+
+export type LikedTruck = {
+  truck: LoveMobile;
+  artists: string[];
+};

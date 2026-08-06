@@ -1,8 +1,10 @@
 import React from 'react';
 import {Truck} from 'lucide-react';
-import {loveMobileTitle, parseTimeRange, truckNumber} from '../loveMobile';
+import {loveMobileTitle, parseTimeRange, truckLabel, truckNumber} from '../loveMobile';
+import {buildShareLink} from '../share';
+import {ShareMenu} from './ShareMenu';
 import type {LayoutOptions} from '../layoutOptions';
-import type {LoveMobile} from '../types';
+import type {LikedTruck, LoveMobile} from '../types';
 
 type LayoutModalProps = {
   layoutOptions: LayoutOptions;
@@ -217,8 +219,7 @@ export function SavedModelPrompt({onLoad, onClose, busy}: {onLoad: () => void; o
   );
 }
 
-export function TrainModelPrompt({count, onDismiss, onTrain}: {count: number; onDismiss: () => void; onTrain: () => void}) {
-  return (
+export function TrainModelPrompt({count, onDismiss, onTrain}: {count: number; onDismiss: () => void; onTrain: () => void}) {  return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onDismiss(); }}>
       <section className="layout-modal train-model-modal" role="dialog" aria-modal="true" aria-labelledby="train-model-title">
         <div className="modal-header">
@@ -232,6 +233,54 @@ export function TrainModelPrompt({count, onDismiss, onTrain}: {count: number; on
           <button type="button" className="secondary" onClick={onDismiss}>Dismiss</button>
           <button type="button" onClick={onTrain}>Train model</button>
         </div>
+      </section>
+    </div>
+  );
+}
+
+export function LikedTrucksModal({trucks, onClose}: {trucks: LikedTruck[]; onClose: () => void}) {
+  const shareText = trucks.length
+    ? `My Street Parade 2026 love mobiles:\n\n${trucks.map((entry) => {
+        const parts = [truckLabel(entry.truck)];
+        if (entry.truck.name) parts.push(entry.truck.name);
+        if (entry.truck.genres) parts.push(entry.truck.genres);
+        if (entry.artists.length) parts.push(`Acts: ${entry.artists.join(', ')}`);
+        return parts.join(' · ');
+      }).join('\n')}`
+    : 'My Street Parade 2026 love mobiles: none yet.';
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="layout-modal liked-trucks-modal" role="dialog" aria-modal="true" aria-labelledby="liked-trucks-title">
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow"><Truck size={16} aria-hidden="true" /> Loved trucks</p>
+            <h2 id="liked-trucks-title">Love mobiles to catch</h2>
+            <p>All trucks of acts you liked or are likely to like, with their set times.</p>
+          </div>
+          <div className="modal-header-actions">
+            <ShareMenu link={buildShareLink()} text={shareText} />
+            <button type="button" className="secondary" onClick={onClose}>Close</button>
+          </div>
+        </div>
+        {trucks.length ? (
+          <ul className="liked-trucks-list">
+            {trucks.map((entry, index) => (
+              <li key={entry.truck.uuid ?? `${entry.truck.number ?? entry.truck.source_index ?? index}-${truckLabel(entry.truck)}`}>
+                <span className="liked-truck-number">#{truckNumber(entry.truck)}</span>
+                <span className="liked-truck-detail">
+                  <strong>{loveMobileTitle(entry.truck)}</strong>
+                  {parseTimeRange(entry.truck.time) && (
+                    <span className="liked-truck-time">{parseTimeRange(entry.truck.time)!.start}–{parseTimeRange(entry.truck.time)!.end}</span>
+                  )}
+                  {entry.truck.genres && <span className="muted">{entry.truck.genres}</span>}
+                  {entry.artists.length > 0 && <span className="muted">Acts: {entry.artists.join(', ')}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">No liked or likely-liked acts yet. Like some artists to collect their trucks here.</p>
+        )}
       </section>
     </div>
   );

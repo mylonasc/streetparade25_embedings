@@ -1,0 +1,38 @@
+export const SHARE_TEXT = 'Street Parade 2026 — explore the embedding visualizer map.';
+
+export function buildShareLink(): string {
+  return window.location.href;
+}
+
+export function telegramShareUrl(link: string, text: string): string {
+  return `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
+}
+
+export function whatsAppShareUrl(link: string, text: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`;
+}
+
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path below.
+  }
+  try {
+    const element = document.createElement('textarea');
+    element.value = text;
+    element.setAttribute('readonly', '');
+    element.style.position = 'fixed';
+    element.style.opacity = '0';
+    document.body.appendChild(element);
+    element.select();
+    const ok = document.execCommand('copy');
+    element.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
