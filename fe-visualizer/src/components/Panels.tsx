@@ -1,8 +1,9 @@
-import {Star, ThumbsDown, ThumbsUp} from 'lucide-react';
+import {Star, ThumbsDown, ThumbsUp, Truck} from 'lucide-react';
 import React, {useState} from 'react';
 import type {Evaluation, LossPoint, TrainingOptions} from '../preferenceTraining';
 import {summarizeExamples} from '../preferenceTraining';
-import type {ArtistSummary, PointLike, PreferenceValue, UserTrack} from '../types';
+import {parseTimeRange, truckLabel, truckNumber} from '../loveMobile';
+import type {ArtistSummary, LoveMobile, PointLike, PreferenceValue, UserTrack} from '../types';
 
 type PreferenceTrainingPanelProps = {
   options: TrainingOptions;
@@ -99,15 +100,18 @@ export function TrainingCurve({history}: {history: LossPoint[]}) {
   );
 }
 
-export function ArtistFavoritesPanel({artists, onPreference, onSelect}: {
+export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvailable, onShowLoveMobile}: {
   artists: ArtistSummary[];
   onPreference: (point: PointLike, value: PreferenceValue) => void;
   onSelect: (point: PointLike) => void;
+  modelAvailable: boolean;
+  onShowLoveMobile: (loveMobile: LoveMobile) => void;
 }) {
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(modelAvailable ? 'likely' : 'liked');
   const visibleArtists = artists.filter((artist) => {
-    if (filter === 'liked') return artist.artistPreference === 'up' || artist.predictedUp > artist.predictedDown;
-    if (filter === 'unliked') return artist.artistPreference === 'down' || artist.predictedDown > artist.predictedUp;
+    if (filter === 'likely') return artist.predictedUp > artist.predictedDown;
+    if (filter === 'unliked') return artist.predictedDown > artist.predictedUp;
+    if (filter === 'liked') return artist.artistPreference === 'up';
     if (filter === 'manual') return Boolean(artist.artistPreference);
     return true;
   });
@@ -117,7 +121,8 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect}: {
       <p className="muted">Rank artists by actual and predicted song preferences, then mark artists liked or unliked.</p>
       <select value={filter} onChange={(event) => setFilter(event.target.value)}>
         <option value="all">All artists</option>
-        <option value="liked">Likely liked</option>
+        <option value="liked">Liked</option>
+        <option value="likely">Likely liked</option>
         <option value="unliked">Likely unliked</option>
         <option value="manual">Manually marked</option>
       </select>
@@ -125,6 +130,20 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect}: {
         {visibleArtists.map((artist) => (
           <article className="artist-favorite-row" key={artist.key}>
             <button type="button" className="artist-title" onClick={() => onSelect(artist.point)}>{artist.name}</button>
+            {artist.loveMobiles.length > 0 && (
+              <div className="artist-love-mobiles" aria-label="Love mobiles">
+                {artist.loveMobiles.map((loveMobile) => {
+                  const range = parseTimeRange(loveMobile.time);
+                  return (
+                    <button type="button" className="love-mobile-chip" key={loveMobile.uuid ?? `${loveMobile.number ?? 'lm'}-${loveMobile.name ?? ''}`} onClick={() => onShowLoveMobile(loveMobile)} title={loveMobile.name || loveMobile.title} aria-label={`Love mobile ${truckLabel(loveMobile)} info`}>
+                      <Truck size={16} aria-hidden="true" />
+                      <span className="love-mobile-chip-number">#{truckNumber(loveMobile)}</span>
+                      {range && <span className="love-mobile-chip-time">{range.start}–{range.end}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="artist-score-grid">
               <span>Actual +{artist.actualUp} / -{artist.actualDown}</span>
               <span>Pred +{artist.predictedUp} / -{artist.predictedDown}</span>

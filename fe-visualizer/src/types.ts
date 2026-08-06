@@ -9,6 +9,24 @@ export type MetadataTracks = Array<{
   source_url?: string;
 }>;
 
+export type LoveMobile = {
+  id?: number | string;
+  uuid?: string;
+  source_index?: number;
+  number?: number | string;
+  name?: string;
+  title?: string;
+  genres?: string;
+  motto?: string;
+  time?: string;
+  description?: string;
+  image?: Record<string, unknown>;
+  links?: Array<Record<string, unknown>>;
+  source?: string;
+  artist_name?: string;
+  artist_bio?: string;
+};
+
 export type PointMetadata = {
   id?: number | string;
   track_id?: number | string;
@@ -23,6 +41,7 @@ export type PointMetadata = {
   cluster?: number;
   track_count?: number;
   tracks?: MetadataTracks;
+  love_mobiles?: LoveMobile[];
   embedding_model?: string;
   model_name?: string;
   embedding_backend?: string;
@@ -144,4 +163,5 @@ export type ArtistSummary = {
   predictedUp: number;
   predictedDown: number;
   artistPreference: PreferenceValue | null;
+  loveMobiles: LoveMobile[];
 };

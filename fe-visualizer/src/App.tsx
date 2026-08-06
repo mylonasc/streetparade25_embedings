@@ -15,10 +15,10 @@ import {useMobileViewport} from './responsive';
 import {BottomSheet} from './BottomSheet';
 import {Visualizer} from './components/Visualizer';
 import {Selection} from './components/Selection';
-import {HelpModal, LayoutModal, SavedModelPrompt, TrainModelPrompt} from './components/Modals';
+import {HelpModal, LayoutModal, LoveMobileModal, SavedModelPrompt, TrainModelPrompt} from './components/Modals';
 import {ArtistFavoritesPanel, PreferenceTrainingPanel, TrackRow, UsernameGate} from './components/Panels';
 import type {
-  ArtistSummary, Job, LayoutJob, Point, PointLike, Prediction, PreferenceValue, SimilarityEdge,
+  ArtistSummary, Job, LayoutJob, LoveMobile, Point, PointLike, Prediction, PreferenceValue, SimilarityEdge,
   Stats, UserTrack, VisualizationFeatures, VisualizationPayload,
 } from './types';
 
@@ -107,6 +107,7 @@ export function App() {
   const [predictedPreferences, setPredictedPreferences] = useState<Record<string, Prediction>>({});
   const [colorByPredictedPreference, setColorByPredictedPreference] = useState(false);
   const [visualizationLoading, setVisualizationLoading] = useState(false);
+  const [activeLoveMobile, setActiveLoveMobile] = useState<LoveMobile | null>(null);
 
   async function loadAll(activeUsername = username): Promise<void> {
     if (!activeUsername) return;
@@ -709,13 +710,14 @@ export function App() {
           )}
           {sideTab === 'tracks' && !songDownloadsEnabled && !isMobile && <section className="panel"><h2>My songs</h2><p className="muted">Song downloads and embeddings are disabled on this deployment.</p></section>}
           {sideTab === 'training' && <PreferenceTrainingPanel options={preferenceTrainingOptions} setOptions={setPreferenceTrainingOptions} summary={preferenceTrainingSummary} status={preferenceTrainingStatus} busy={preferenceTrainingBusy} lossHistory={preferenceLossHistory} evaluation={preferenceEvaluation} evaluationSplit={preferenceEvaluationSplit} setEvaluationSplit={setPreferenceEvaluationSplit} onRefreshPreferences={refreshPreferenceData} onTrain={trainPreferenceColorModel} onLoadModel={loadPreferenceColorModel} />}
-          {sideTab === 'artists' && <ArtistFavoritesPanel artists={artistSummaries} onPreference={setArtistPreference} onSelect={(point) => selectPoint(point, {focus: true})} />}
+          {sideTab === 'artists' && <ArtistFavoritesPanel artists={artistSummaries} onPreference={setArtistPreference} onSelect={(point) => selectPoint(point, {focus: true})} modelAvailable={Object.keys(predictedPreferences).length > 0} onShowLoveMobile={setActiveLoveMobile} />}
         </aside>
       </section>
       {showLayoutModal && <LayoutModal layoutOptions={layoutOptions} setLayoutOptions={setLayoutOptions} recomputeLayout={recomputeLayout} onClose={() => setShowLayoutModal(false)} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {showSavedModelPrompt && <SavedModelPrompt onLoad={loadPreferenceColorModel} onClose={() => setShowSavedModelPrompt(false)} busy={preferenceTrainingBusy} />}
       {showTrainPrompt && <TrainModelPrompt count={preferenceRegistrationCount} onDismiss={() => setShowTrainPrompt(false)} onTrain={handleTrainPromptTrain} />}
+      {activeLoveMobile && <LoveMobileModal loveMobile={activeLoveMobile} onClose={() => setActiveLoveMobile(null)} />}
     </main>
   );
 }
@@ -739,6 +741,7 @@ function buildArtistSummaries(points: Point[], thumbPreferences: Record<string, 
       predictedUp: 0,
       predictedDown: 0,
       artistPreference: (thumbPreferences?.[preferenceKeyForPoint(artistPoint) ?? ''] as PreferenceValue | undefined) || null,
+      loveMobiles: Array.isArray(artistPoint.metadata?.love_mobiles) ? artistPoint.metadata.love_mobiles : [],
     };
     const actual = thumbPreferences?.[preferenceKeyForPoint(point) ?? ''];
     const predicted = predictedPreferences?.[preferenceKeyForPoint(point) ?? ''];

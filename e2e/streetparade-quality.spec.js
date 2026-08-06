@@ -31,6 +31,7 @@ const OVERLAP_GROUPS = [
   '.gate-card',
   '.training-options',
   '.artist-favorite-actions',
+  '.artist-love-mobiles',
   '.playlist',
   '.tooltip-actions',
 ];
@@ -207,9 +208,18 @@ for (const device of DEVICES) {
       await expect(page.locator('.artist-favorites-panel')).toBeVisible();
       await runChecks(page, slug, '06-artists');
 
+      await page.locator('.artist-favorites-panel select').selectOption('all');
+      const truckChip = page.locator('.love-mobile-chip').first();
+      if (await truckChip.count()) {
+        await truckChip.click();
+        await expect(page.locator('.love-mobile-modal')).toBeVisible();
+        await runChecks(page, slug, '07-love-mobile-modal');
+        await page.getByRole('button', { name: 'Close' }).click();
+      }
+
       await page.locator('.map-toolbar').getByRole('button', { name: 'Help' }).click();
       await expect(page.locator('.help-modal')).toBeVisible();
-      await runChecks(page, slug, '07-help-modal');
+      await runChecks(page, slug, '08-help-modal');
       await page.getByRole('button', { name: 'Close' }).click();
 
       const activeSheet = page.locator('.selection-panel.has-selection');
@@ -223,7 +233,7 @@ for (const device of DEVICES) {
 
       await page.getByRole('button', { name: 'Configure and recompute' }).click();
       await expect(page.locator('.layout-modal')).toBeVisible();
-      await runChecks(page, slug, '08-layout-modal');
+      await runChecks(page, slug, '09-layout-modal');
     });
   });
 }

@@ -1,5 +1,8 @@
 import React from 'react';
+import {Truck} from 'lucide-react';
+import {loveMobileTitle, parseTimeRange, truckNumber} from '../loveMobile';
 import type {LayoutOptions} from '../layoutOptions';
+import type {LoveMobile} from '../types';
 
 type LayoutModalProps = {
   layoutOptions: LayoutOptions;
@@ -126,6 +129,32 @@ export function LayoutModal({layoutOptions, setLayoutOptions, recomputeLayout, o
             <button type="button" className="secondary" onClick={onClose}>Cancel</button>
           </div>
         </form>
+      </section>
+    </div>
+  );
+}
+
+export function LoveMobileModal({loveMobile, onClose}: {loveMobile: LoveMobile; onClose: () => void}) {
+  const range = parseTimeRange(loveMobile.time);
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="layout-modal love-mobile-modal" role="dialog" aria-modal="true" aria-labelledby="love-mobile-title">
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow"><Truck size={16} aria-hidden="true" /> Love Mobile #{truckNumber(loveMobile)}</p>
+            <h2 id="love-mobile-title">{loveMobileTitle(loveMobile)}</h2>
+            {range && <p className="love-mobile-time">Playing {range.start} – {range.end}</p>}
+          </div>
+          <button type="button" className="secondary" onClick={onClose}>Close</button>
+        </div>
+        <div className="love-mobile-content">
+          {loveMobile.genres && <p><strong>Genres</strong><span>{loveMobile.genres}</span></p>}
+          {loveMobile.motto && <p><strong>Motto</strong><span>{loveMobile.motto}</span></p>}
+          {loveMobile.artist_name && <p><strong>Artist</strong><span>{loveMobile.artist_name}</span></p>}
+          {loveMobile.artist_bio && <p><strong>About</strong><span>{loveMobile.artist_bio}</span></p>}
+          {loveMobile.description && <p><strong>About the truck</strong><span className="love-mobile-description">{loveMobile.description}</span></p>}
+          {loveMobile.source && <p className="muted">Source: {loveMobile.source}</p>}
+        </div>
       </section>
     </div>
   );
