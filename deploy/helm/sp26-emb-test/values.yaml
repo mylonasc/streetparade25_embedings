@@ -36,7 +36,7 @@ api:
 visualizer:
   replicaCount: 1
   image:
-    tag: visualizer-0.1.8-1f7d733d5c52
+    tag: visualizer-0.1.9-dae2f2d64c94
   service:
     type: ClusterIP
     webPort: 80
