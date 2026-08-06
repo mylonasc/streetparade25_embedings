@@ -1,3 +1,4 @@
+import {ChevronDown, ChevronUp} from 'lucide-react';
 import type {PointerEvent as ReactPointerEvent, ReactNode} from 'react';
 
 type BottomSheetProps = {
@@ -46,14 +47,14 @@ export function BottomSheet({title, children, show, minimized, onMinimize, onTog
       <div className="selection-panel-header" onPointerDown={handleGripPointerDown}>
         <button
           type="button"
-          className="selection-title-toggle"
+          className="sheet-minimize-toggle"
           aria-expanded={!minimized}
           aria-label={minimized ? 'Expand' : 'Minimize'}
           onClick={onToggle}
         >
-          <span>{title}</span>
-          <span className="sheet-toggle-symbol" aria-hidden="true">{minimized ? '+' : '−'}</span>
+          {minimized ? <ChevronUp size={20} aria-hidden="true" /> : <ChevronDown size={20} aria-hidden="true" />}
         </button>
+        <h2 className="selection-title">{title}</h2>
         {actions}
       </div>
       {children}

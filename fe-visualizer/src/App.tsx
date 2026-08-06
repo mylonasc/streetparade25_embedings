@@ -1,3 +1,4 @@
+import {CircleHelp, Pause, Play, Redo2, ThumbsDown, ThumbsUp, Undo2} from 'lucide-react';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {getUserPreferences, request, setUserPreference} from './api';
 import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalNumber} from './layoutOptions';
@@ -590,11 +591,11 @@ export function App() {
             </div>
             <div className="map-toolbar">
               <button type="button" className="secondary toolbar-text-button" onClick={resetSelection} disabled={!selected}>Reset</button>
-              <button type="button" className="secondary icon-button" aria-label="Undo selection" onClick={undoSelection} disabled={!selectionUndoStack.length}>↶</button>
-              <button type="button" className="secondary icon-button" aria-label="Redo selection" onClick={redoSelection} disabled={!selectionRedoStack.length}>↷</button>
+              <button type="button" className="secondary icon-button" aria-label="Undo selection" onClick={undoSelection} disabled={!selectionUndoStack.length}><Undo2 size={20} aria-hidden="true" /></button>
+              <button type="button" className="secondary icon-button" aria-label="Redo selection" onClick={redoSelection} disabled={!selectionRedoStack.length}><Redo2 size={20} aria-hidden="true" /></button>
               <button type="button" className={`secondary toggle-button ${showSongs ? 'active' : ''}`} onClick={() => setShowSongs((value) => !value)}>Tracks</button>
               <button type="button" className={`secondary toggle-button ${showArtists ? 'active' : ''}`} onClick={() => setShowArtists((value) => !value)}>Artists</button>
-              <button type="button" className="secondary icon-button" aria-label="Help" onClick={() => setShowHelp(true)}>?</button>
+              <button type="button" className="secondary icon-button" aria-label="Help" onClick={() => setShowHelp(true)}><CircleHelp size={20} aria-hidden="true" /></button>
             </div>
             {!visualizationLoading && stats.base_point_count === 0 && (
               <div className="empty-warning">
@@ -629,7 +630,7 @@ export function App() {
                       aria-label={playing ? 'Stop' : 'Play'}
                       onClick={() => setPlaying((value) => !value)}
                     >
-                      {playing ? '⏸' : '▶'}
+                      {playing ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
                     </button>
                   )}
                   {canThumb && (
@@ -641,7 +642,7 @@ export function App() {
                         aria-label="Thumbs up"
                         onClick={() => toggleThumb(activePoint, 'up')}
                       >
-                        👍
+                        <ThumbsUp size={20} aria-hidden="true" />
                       </button>
                       <button
                         type="button"
@@ -650,7 +651,7 @@ export function App() {
                         aria-label="Thumbs down"
                         onClick={() => toggleThumb(activePoint, 'down')}
                       >
-                        👎
+                        <ThumbsDown size={20} aria-hidden="true" />
                       </button>
                     </>
                   )}

@@ -24,6 +24,7 @@ const OVERLAP_GROUPS = [
   '.map-toolbar',
   '.selection-actions',
   '.selection-history',
+  '.selection-panel-header',
   '.side-tabs',
   '.evaluation-toggle',
   '.modal-actions',

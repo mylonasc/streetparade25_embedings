@@ -1,3 +1,4 @@
+import {Star, ThumbsDown, ThumbsUp} from 'lucide-react';
 import React, {useState} from 'react';
 import type {Evaluation, LossPoint, TrainingOptions} from '../preferenceTraining';
 import {summarizeExamples} from '../preferenceTraining';
@@ -130,8 +131,8 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect}: {
               <span>{artist.trackCount} songs</span>
             </div>
             <div className="artist-favorite-actions">
-              <button type="button" className={`secondary thumb-button thumb-up ${artist.artistPreference === 'up' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'up')} aria-pressed={artist.artistPreference === 'up'}>👍</button>
-              <button type="button" className={`secondary thumb-button thumb-down ${artist.artistPreference === 'down' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'down')} aria-pressed={artist.artistPreference === 'down'}>👎</button>
+              <button type="button" className={`secondary thumb-button thumb-up ${artist.artistPreference === 'up' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'up')} aria-pressed={artist.artistPreference === 'up'}><ThumbsUp size={18} aria-hidden="true" /></button>
+              <button type="button" className={`secondary thumb-button thumb-down ${artist.artistPreference === 'down' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'down')} aria-pressed={artist.artistPreference === 'down'}><ThumbsDown size={18} aria-hidden="true" /></button>
             </div>
           </article>
         ))}
@@ -144,7 +145,7 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect}: {
 export function TrackRow({track, active, onSelect}: {track: UserTrack; active: boolean; onSelect: () => void}) {
   return (
     <button type="button" className={`track-row ${active ? 'active' : ''}`} onClick={onSelect}>
-      <span className="track-star">★</span>
+      <span className="track-star" aria-hidden="true"><Star size={18} /></span>
       <strong>{track.title || track.source_url}</strong>
       <span>{track.source_type} · {track.status}</span>
       {track.last_error && <small>{track.last_error}</small>}

@@ -1,3 +1,4 @@
+import {Play, SkipForward, ThumbsDown, ThumbsUp} from 'lucide-react';
 import type {ReactNode} from 'react';
 import type {Edge, Point, PreferenceValue} from './types';
 
@@ -23,7 +24,7 @@ function ThumbButtons({value, onThumb}: {value: PreferenceValue | null | undefin
         aria-label="Thumbs up"
         onClick={() => onThumb('up')}
       >
-        👍
+        <ThumbsUp size={18} aria-hidden="true" />
       </button>
       <button
         type="button"
@@ -32,7 +33,7 @@ function ThumbButtons({value, onThumb}: {value: PreferenceValue | null | undefin
         aria-label="Thumbs down"
         onClick={() => onThumb('down')}
       >
-        👎
+        <ThumbsDown size={18} aria-hidden="true" />
       </button>
     </>
   );
@@ -53,8 +54,8 @@ function PointTooltipContent({point, thumbValue, handlers}: {point: Point; thumb
         <div className="tooltip-actions">
           <ThumbButtons value={thumbValue} onThumb={(value) => handlers.onThumb(point, value)} />
           {handlers.onSelectArtist && <button type="button" aria-label="Select artist" onClick={() => handlers.onSelectArtist?.(point)}>Artist</button>}
-          {handlers.onPlaySimilar && <button type="button" aria-label="Play connected song" onClick={handlers.onPlaySimilar}>▶</button>}
-          {handlers.onRandomSong && <button type="button" aria-label="Random song" onClick={handlers.onRandomSong}>⏭</button>}
+          {handlers.onPlaySimilar && <button type="button" aria-label="Play connected song" onClick={handlers.onPlaySimilar}><Play size={18} aria-hidden="true" /></button>}
+          {handlers.onRandomSong && <button type="button" aria-label="Random song" onClick={handlers.onRandomSong}><SkipForward size={18} aria-hidden="true" /></button>}
         </div>
       </>
     );
@@ -71,8 +72,8 @@ function PointTooltipContent({point, thumbValue, handlers}: {point: Point; thumb
         {rows.map(([key, value]) => <span key={key}>{key}: {String(value)}</span>)}
         <div className="tooltip-actions">
           <ThumbButtons value={thumbValue} onThumb={(value) => handlers.onThumb(point, value)} />
-          {handlers.onPlayArtistSong && <button type="button" aria-label="Select artist song" onClick={() => handlers.onPlayArtistSong?.(point)}>▶ song</button>}
-          {handlers.onRandomSong && <button type="button" aria-label="Random song" onClick={handlers.onRandomSong}>⏭</button>}
+          {handlers.onPlayArtistSong && <button type="button" aria-label="Select artist song" onClick={() => handlers.onPlayArtistSong?.(point)}><Play size={18} aria-hidden="true" /> song</button>}
+          {handlers.onRandomSong && <button type="button" aria-label="Random song" onClick={handlers.onRandomSong}><SkipForward size={18} aria-hidden="true" /></button>}
         </div>
       </>
     );

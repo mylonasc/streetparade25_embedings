@@ -41,6 +41,7 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .map-toolbar::-webkit-scrollbar { display: none; }
 .map-toolbar button { flex: 0 0 auto; min-height: 36px; pointer-events: auto; background: rgba(8, 11, 18, 0.86); backdrop-filter: blur(12px); font-size: 0.82rem; }
 .icon-button { width: 38px; height: 38px; min-height: 38px; padding: 0; display: inline-grid; place-items: center; font-size: 1.05rem; }
+.icon-button svg { width: 20px; height: 20px; }
 .toolbar-text-button { padding-inline: 12px; }
 .toggle-button { padding-inline: 12px; }
 .toggle-button.active { color: #06100c; background: var(--accent); }
@@ -66,13 +67,14 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .selection-panel.has-selection { position: fixed; z-index: 30; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); display: block; max-height: calc(100svh - 8px - env(safe-area-inset-bottom)); overflow: auto; padding: 8px 12px calc(12px + env(safe-area-inset-bottom)); border-radius: 22px 22px 18px 18px; background: linear-gradient(180deg, rgba(22, 30, 45, 0.98), rgba(10, 15, 26, 0.98)); box-shadow: 0 -18px 70px rgba(0,0,0,0.5); }
 .selection-panel.has-selection.is-minimized { max-height: 78px; overflow: hidden; }
 .sheet-grip { width: 48px; height: 5px; margin: 0 auto 10px; border-radius: 999px; background: rgba(255,255,255,0.22); cursor: ns-resize; touch-action: none; }
-.selection-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; cursor: ns-resize; touch-action: none; flex-wrap: wrap; }
+.selection-panel-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; cursor: ns-resize; touch-action: none; flex-wrap: wrap; }
 .selection-panel-header button { cursor: pointer; }
 .sheet-quick-actions { display: flex; align-items: center; gap: 6px; }
 .selection-panel h2 { margin: 0; font-size: 0.76rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+.sheet-minimize-toggle { flex: 0 0 auto; display: inline-grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 0; border: 0; border-radius: 999px; color: #06100c; background: var(--accent); box-shadow: 0 2px 12px rgba(133, 245, 196, 0.3); }
+.sheet-minimize-toggle svg { width: 20px; height: 20px; }
+.selection-panel .selection-title { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .sheet-toggle { min-height: 32px; padding: 6px 10px; font-size: 0.76rem; }
-.selection-title-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; margin: 0; padding: 0; border: 0; background: none; font-size: 0.76rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
-.sheet-toggle-symbol { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 999px; color: var(--text); font-size: 0.92rem; line-height: 1; }
 .selection-panel.is-minimized .selection-actions,
 .selection-panel.is-minimized .selection-history,
 .selection-panel.is-minimized .shortcut-hint,
@@ -88,8 +90,10 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .tooltip strong, .tooltip span { display: block; overflow-wrap: anywhere; }
 .tooltip span, .muted, p { color: var(--muted); }
 .tooltip-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.tooltip-actions button { min-width: 38px; height: 34px; min-height: 34px; padding: 0 9px; display: inline-grid; place-items: center; }
+.tooltip-actions button { min-width: 38px; height: 34px; min-height: 34px; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.tooltip-actions button svg { width: 18px; height: 18px; }
 .thumb-button { width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0; display: inline-grid; place-items: center; border-radius: 999px; color: var(--text); background: rgba(255,255,255,0.08); border: 1px solid var(--line); }
+.thumb-button svg { width: 18px; height: 18px; }
 .thumb-button.active { transform: translateY(-1px); }
 .tooltip-actions .thumb-up.active, .thumb-button.thumb-up.active { color: #06100c; background: var(--accent); border-color: transparent; box-shadow: 0 0 0 3px rgba(133, 245, 196, 0.24), 0 0 18px rgba(133, 245, 196, 0.34); }
 .tooltip-actions .thumb-down.active, .thumb-button.thumb-down.active { color: #fff; background: var(--warm); border-color: transparent; box-shadow: 0 0 0 3px rgba(255, 92, 53, 0.24), 0 0 18px rgba(255, 92, 53, 0.34); }
@@ -106,7 +110,8 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .track-row { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; width: 100%; padding: 12px; border-radius: 16px; color: var(--text); background: rgba(255,255,255,0.06); text-align: left; }
 .track-row:hover, .track-row.active { transform: none; background: rgba(255, 92, 53, 0.18); outline: 1px solid rgba(255, 92, 53, 0.55); }
 .track-row strong, .track-row span:not(.track-star), .track-row small { grid-column: 2; overflow-wrap: anywhere; }
-.track-star { grid-row: 1 / span 3; align-self: center; color: var(--warm); font-size: 1.4rem; line-height: 1; }
+.track-star { grid-row: 1 / span 3; align-self: center; display: grid; place-items: center; color: var(--warm); }
+.track-star svg { width: 18px; height: 18px; }
 .track-row span, .track-row small { color: var(--muted); overflow-wrap: anywhere; }
 dl { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px 12px; }
 dt { color: var(--muted); text-transform: capitalize; }
@@ -210,8 +215,8 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
   .selection-panel h2 { margin-bottom: 14px; font-size: 1.5em; color: var(--text); text-transform: none; letter-spacing: normal; }
   .selection-panel-header { display: block; margin-bottom: 0; }
   .sheet-toggle { display: none; }
-  .selection-title-toggle { margin-bottom: 14px; font-size: 1.5em; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: normal; cursor: default; pointer-events: none; }
-  .selection-title-toggle .sheet-toggle-symbol { display: none; }
+  .sheet-minimize-toggle { display: none; }
+  .selection-panel .selection-title { display: block; margin-bottom: 14px; font-size: 1.5em; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: normal; }
   .selection-panel.is-minimized .selection-actions { display: flex; }
   .selection-panel.is-minimized .selection-history, .selection-panel.is-minimized .shortcut-hint { display: flex; }
   .selection-panel.is-minimized dl { display: grid; }
@@ -224,7 +229,7 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 
 @media (pointer: coarse) {
   .map-card, .panel, .gate-card, .notice, .map-toolbar button, .map-search input, .cluster-select-row select, .search-results, .modal-backdrop { backdrop-filter: none; }
-  .map-toolbar button, .icon-button, .thumb-button, .sheet-toggle, .tooltip-actions button, .selection-actions button, .selection-history button, .evaluation-toggle button { min-width: 44px; min-height: 44px; }
+  .map-toolbar button, .icon-button, .thumb-button, .sheet-toggle, .sheet-minimize-toggle, .tooltip-actions button, .selection-actions button, .selection-history button, .evaluation-toggle button { min-width: 44px; min-height: 44px; }
   button { min-height: 44px; }
   .map-toolbar button { font-size: 1rem; }
   .toolbar-text-button, .toggle-button { padding-inline: 16px; }
