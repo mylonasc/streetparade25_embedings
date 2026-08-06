@@ -21,27 +21,21 @@ How the SP26 deployments run on the `magarathea.ddns.net` Kubernetes cluster, as
 |-----------------|------------------------------------------------------------------|
 | Namespace       | `sp26-emb-live`                                                  |
 | Helm release    | `sp26-emb-live` (chart `deploy/helm/sp26-emb-prod`, revision 2)  |
-| Visualizer      | `mylonasc/magarathea:visualizer-0.1.3` (ClusterIP :80)      |
+| Visualizer      | `mylonasc/magarathea:visualizer-0.1.4` (ClusterIP :80)      |
 | API             | `mylonasc/magarathea:api-minimal-0.1.3` (ClusterIP :8000)           |
 | PVC             | `sp26-emb-data` (2Gi, `standard-rwo`), mounted at `/data` in API |
 | Ingresses       | `sp26-emb-navigator-ui`, `sp26-emb-navigator-api`, `sp26-emb-navigator-ui-redirect` |
 
-The release was installed from `deploy/helm/sp26-emb-prod` using
-`values-sp26-dev.yaml` (which sets the base path `/streetparade-navigator-2026` and
-`fullnameOverride: sp26-emb`), with the namespace overridden at install time:
+The chart's `values.yaml` is self-contained for the live deployment (namespace
+`sp26-emb-live`, base path `/streetparade-navigator-2026`, `fullnameOverride: sp26-emb`,
+existing PVC `sp26-emb-data`, ingress enabled), so no `-f`/`--set` overrides are needed:
 
 ```bash
-helm install sp26-emb-live deploy/helm/sp26-emb-prod --namespace sp26-emb-live \
-  -f deploy/helm/sp26-emb-prod/values-sp26-dev.yaml \
-  --set namespace.name=sp26-emb-live \
-  --set persistence.existingClaim=sp26-emb-data \
-  --set ingress.enabled=false
-# ...copy data into the PVC, then:
-helm upgrade sp26-emb-live deploy/helm/sp26-emb-prod --namespace sp26-emb-live \
-  -f deploy/helm/sp26-emb-prod/values-sp26-dev.yaml \
-  --set namespace.name=sp26-emb-live \
-  --set persistence.existingClaim=sp26-emb-data \
-  --set ingress.enabled=true
+# first install (namespace already exists; --create-namespace only if it does not):
+helm upgrade --install sp26-emb-live deploy/helm/sp26-emb-prod --namespace sp26-emb-live
+
+# later releases:
+helm upgrade sp26-emb-live deploy/helm/sp26-emb-prod --namespace sp26-emb-live
 ```
 
 ## The test deployment
@@ -50,9 +44,9 @@ helm upgrade sp26-emb-live deploy/helm/sp26-emb-prod --namespace sp26-emb-live \
 |-----------------|------------------------------------------------------------------|
 | Namespace       | `sp26-test`                                                      |
 | Helm release    | `sp26-emb-test` (chart `deploy/helm/sp26-emb-test`, revision 1)  |
-| Chart version   | 0.1.4                                                            |
-| Visualizer      | `mylonasc/magarathea:visualizer-test-0.1.3` (ClusterIP :80)      |
-| API             | `mylonasc/magarathea:api-test-0.1.3` (ClusterIP :8000)           |
+| Chart version   | 0.1.5                                                            |
+| Visualizer      | `mylonasc/magarathea:visualizer-0.1.4` (ClusterIP :80)      |
+| API             | `mylonasc/magarathea:api-minimal-0.1.3` (ClusterIP :8000)           |
 | PVC             | `sp26-emb-test-data` (2Gi, `standard-rwo`), mounted at `/data`   |
 | Ingresses       | `sp26-emb-test-navigator-ui`, `sp26-emb-test-navigator-api`, `sp26-emb-test-navigator-ui-redirect` |
 
@@ -89,9 +83,10 @@ therefore works at any base path, which is why the UI/assets use relative URLs
 The path-locked builds (`fe-visualizer/Dockerfile.navigator2026` /
 `visualizer-minimal-*`) are **not** compatible with the chart ingresses: after the
 rewrite they would serve their `location = /` health response as a non-HTML body and the
-browser would download it. The live deployment therefore uses the path-agnostic
-`visualizer-*` image built by `publish-dockerhub.yml` from `fe-visualizer/Dockerfile`
-with `VITE_BASE_PATH=./`.
+browser would download it. Both deployments therefore use the path-agnostic
+`visualizer-*` image, built from `fe-visualizer/Dockerfile` with `VITE_BASE_PATH=./`
+by `publish-dockerhub.yml` on `main` and `publish-dockerhub-test.yml` on the
+`feat/sp26-test-env` branch.
 
 ## TLS
 
@@ -117,8 +112,10 @@ TLS is host-level and shared — there is no per-namespace certificate.
   secret holding a Docker Hub personal-access token, attached to the `default` service
   account via `imagePullSecrets`.
 - `publish-dockerhub.yml` builds the `api-minimal-*`, `visualizer-minimal-*`
-  (path-locked) and `visualizer-*` (path-agnostic) tags; `publish-dockerhub-test.yml`
-  builds the `*-test-*` tags.
+  (path-locked) and `visualizer-*` (path-agnostic) tags (minor + version + sha);
+  `publish-dockerhub-test.yml` builds the same `api-minimal-*` / `visualizer-*`
+  families (version + sha) from the `feat/sp26-test-env` branch. Both environments
+  use the same tag naming.
 
 ## Data
 
@@ -132,13 +129,13 @@ TLS is host-level and shared — there is no per-namespace certificate.
 
 ## Charts
 
-- `deploy/helm/sp26-emb-prod/` — the active chart (used for the live deployment).
-  `values-sp26-dev.yaml` is the values file for the live base path.
+- `deploy/helm/sp26-emb-prod/` — the active chart for the live deployment; its
+  `values.yaml` is self-contained (namespace `sp26-emb-live`, `/streetparade-navigator-2026`).
 - `deploy/helm/sp26-emb/` — legacy original prod chart (path-locked visualizer,
   LoadBalancer service, api-proxy sidecar). No longer deployed.
 - `deploy/helm/sp26-emb-test/` — the active test chart, deployed to the `sp26-test`
-  namespace at `/sp26-test` (chart version 0.1.4, images `*-test-0.1.3`). The former
-  `sp26-prod` namespace is gone.
+  namespace at `/sp26-test` (chart version 0.1.5, images `api-minimal-0.1.3` /
+  `visualizer-0.1.4`, same naming as prod). The former `sp26-prod` namespace is gone.
 
 ## Gotchas
 
