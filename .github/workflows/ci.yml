@@ -3,11 +3,27 @@ name: CI
 on:
   push:
     branches:
-      - '**'
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - 'deploy/**'
+      - '.opencode/**'
+      - 'site/**'
+      - '**/*.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'deploy/**'
+      - '.opencode/**'
+      - 'site/**'
+      - '**/*.md'
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend-tests:
@@ -122,13 +138,6 @@ jobs:
         working-directory: fe-visualizer
         run: npm run build
 
-      - name: Build /streetparade26/ visualizer
-        working-directory: fe-visualizer
-        env:
-          VITE_BASE_PATH: /streetparade26/
-          VITE_API_BASE_URL: /streetparade26/api
-        run: npm run build
-
   docker-smoke:
     name: Docker Smoke
     runs-on: ubuntu-latest
@@ -140,6 +149,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Validate Compose files
         run: |
           docker compose config
@@ -147,7 +159,9 @@ jobs:
 
       - name: Build minimal API image
         run: |
-          docker build \
+          docker buildx build --load \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --build-arg API_PROFILE=minimal \
             --build-arg ENABLE_SONG_DL_AND_EMBEDINGS=0 \
             --build-arg STREETPARADE_VECTOR_STORE=numpy \
@@ -173,7 +187,12 @@ jobs:
           PY
 
       - name: Build streetparade26 visualizer image
-        run: docker build -f fe-visualizer/Dockerfile.streetparade26 -t streetparade26-visualizer-ci fe-visualizer
+        run: |
+          docker buildx build --load \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            -f fe-visualizer/Dockerfile.streetparade26 \
+            -t streetparade26-visualizer-ci fe-visualizer
 
       - name: Check nginx config
         run: docker run --rm streetparade26-visualizer-ci nginx -t
