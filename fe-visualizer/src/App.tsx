@@ -11,7 +11,7 @@ import type {EmbeddedTrack, LossPoint, TrainingOptions, TrainedPreferenceModel} 
 import {buildSearchIndex, searchResults} from './search';
 import {buildArtistSummaries, buildLikedTrucks} from './artistSummary';
 import {playlistForPoint, preferenceKeyForPoint, preferenceTarget} from './selection';
-import {serializeLikedTrucks, shareBlurb} from './share';
+import {serializeLikedTrucks, shareBlurb, soundcloudUrlFromTracks} from './share';
 import {MARKS_KEY, USERNAME_KEY, readMarks, safeGetItem, safeSetItem} from './storage';
 import {useMobileViewport} from './responsive';
 import {BottomSheet} from './BottomSheet';
@@ -510,7 +510,11 @@ export function App() {
   const artistSummaries = useMemo(() => buildArtistSummaries(points, thumbPreferences, predictedPreferences), [points, thumbPreferences, predictedPreferences]);
   const likedTrucks = useMemo(() => buildLikedTrucks(artistSummaries), [artistSummaries]);
   const likedArtists = useMemo(
-    () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.likeScore > 0).map((artist) => ({name: artist.name, score: artist.likeScore})),
+    () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.likeScore > 0).map((artist) => ({
+      name: artist.name,
+      score: artist.likeScore,
+      soundcloudUrl: soundcloudUrlFromTracks(artist.point.metadata?.tracks),
+    })),
     [artistSummaries],
   );
 

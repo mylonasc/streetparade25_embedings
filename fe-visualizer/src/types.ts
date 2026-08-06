@@ -22,6 +22,7 @@ export type LoveMobile = {
   description?: string;
   image?: Record<string, unknown>;
   links?: Array<Record<string, unknown>>;
+  artist_links?: Array<Record<string, unknown>>;
   source?: string;
   artist_name?: string;
   artist_bio?: string;
@@ -181,11 +182,13 @@ export type SharedTruck = {
   time: string;
   artists: string[];
   score: number;
+  soundcloudUrl?: string;
 };
 
 export type SharedArtist = {
   name: string;
   score: number;
+  soundcloudUrl?: string;
 };
 
 export type SharedPayload = {

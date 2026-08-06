@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {serializeLikedTrucks, shareBlurb, telegramShareUrl, whatsAppShareUrl} from './share';
+import {serializeLikedTrucks, shareBlurb, soundcloudUrlFromLinks, soundcloudUrlFromTracks, telegramShareUrl, whatsAppShareUrl} from './share';
 
 describe('telegramShareUrl', () => {
   it('builds a t.me share URL with encoded url and text', () => {
@@ -21,9 +21,32 @@ describe('serializeLikedTrucks', () => {
       {truck: {number: 9, name: 'Magic Mountain', genres: 'Tech House', time: '15:04–19:04'}, artists: ['Cosmic Circle'], score: 0.83},
       {truck: {source_index: 3, title: 'Bass Wagon', time: '20:00–00:00'}, artists: ['DJ Bass']},
     ])).toEqual([
-      {number: '9', name: 'Magic Mountain', genres: 'Tech House', time: '15:04–19:04', artists: ['Cosmic Circle'], score: 0.83},
-      {number: '3', name: 'Bass Wagon', genres: '', time: '20:00–00:00', artists: ['DJ Bass'], score: 0},
+      {number: '9', name: 'Magic Mountain', genres: 'Tech House', time: '15:04–19:04', artists: ['Cosmic Circle'], score: 0.83, soundcloudUrl: ''},
+      {number: '3', name: 'Bass Wagon', genres: '', time: '20:00–00:00', artists: ['DJ Bass'], score: 0, soundcloudUrl: ''},
     ]);
+  });
+
+  it('extracts the soundcloud url from love mobile links', () => {
+    expect(serializeLikedTrucks([
+      {truck: {number: 9, name: 'Magic Mountain', artist_links: [{type: 'soundcloud', url: 'https://soundcloud.com/magic-mountain'}]}, artists: ['Cosmic Circle'], score: 0.5},
+    ])).toEqual([
+      {number: '9', name: 'Magic Mountain', genres: '', time: '', artists: ['Cosmic Circle'], score: 0.5, soundcloudUrl: 'https://soundcloud.com/magic-mountain'},
+    ]);
+  });
+});
+
+describe('soundcloudUrlFromLinks', () => {
+  it('prefers the soundcloud type link and tolerates missing link lists', () => {
+    expect(soundcloudUrlFromLinks([{type: 'website', url: 'https://example.com'}], [{type: 'soundcloud', url: 'https://soundcloud.com/adambeyer'}])).toBe('https://soundcloud.com/adambeyer');
+    expect(soundcloudUrlFromLinks(undefined, null)).toBe('');
+  });
+});
+
+describe('soundcloudUrlFromTracks', () => {
+  it('finds the first soundcloud track url', () => {
+    expect(soundcloudUrlFromTracks([{url: 'https://soundcloud.com/aiiamusic/aiia-season-opening'}])).toBe('https://soundcloud.com/aiiamusic/aiia-season-opening');
+    expect(soundcloudUrlFromTracks([{url: 'https://example.com/x'}, {source_url: 'https://soundcloud.com/other/thing'}])).toBe('https://soundcloud.com/other/thing');
+    expect(soundcloudUrlFromTracks([])).toBe('');
   });
 });
 

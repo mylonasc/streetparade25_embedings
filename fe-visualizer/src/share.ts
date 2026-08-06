@@ -12,13 +12,14 @@ export function whatsAppShareUrl(link: string, text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`;
 }
 
-export function serializeLikedTrucks(trucks: {truck: {number?: number | string; source_index?: number; name?: string; title?: string; genres?: string; time?: string}; artists: string[]; score?: number}[]): {
+export function serializeLikedTrucks(trucks: {truck: {number?: number | string; source_index?: number; name?: string; title?: string; genres?: string; time?: string; links?: Array<Record<string, unknown>>; artist_links?: Array<Record<string, unknown>>}; artists: string[]; score?: number}[]): {
   number: string;
   name: string;
   genres: string;
   time: string;
   artists: string[];
   score: number;
+  soundcloudUrl: string;
 }[] {
   return trucks.map(({truck, artists, score = 0}) => ({
     number: truckNumber(truck),
@@ -27,7 +28,29 @@ export function serializeLikedTrucks(trucks: {truck: {number?: number | string; 
     time: truck.time || '',
     artists,
     score,
+    soundcloudUrl: soundcloudUrlFromLinks(truck.links, truck.artist_links),
   }));
+}
+
+export function soundcloudUrlFromLinks(...linkLists: Array<Array<Record<string, unknown>> | null | undefined>): string {
+  for (const links of linkLists) {
+    if (!Array.isArray(links)) continue;
+    for (const link of links) {
+      const url = typeof link?.url === 'string' ? link.url : '';
+      const type = typeof link?.type === 'string' ? link.type : '';
+      if (type === 'soundcloud' || url.includes('soundcloud.com')) return url;
+    }
+  }
+  return '';
+}
+
+export function soundcloudUrlFromTracks(tracks: Array<{url?: string; source_url?: string}> | null | undefined): string {
+  if (!Array.isArray(tracks)) return '';
+  for (const track of tracks) {
+    const url = typeof track?.url === 'string' ? track.url : (typeof track?.source_url === 'string' ? track.source_url : '');
+    if (url && url.includes('soundcloud.com')) return url;
+  }
+  return '';
 }
 
 export function shareBlurb(username: string, truckCount: number, artistCount: number): string {

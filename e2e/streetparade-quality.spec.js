@@ -41,6 +41,7 @@ const OVERLAP_GROUPS = [
   '.share-sort',
   '.share-score-filter',
   '.shared-artists',
+  '.share-player',
   '.playlist',
   '.tooltip-actions',
 ];

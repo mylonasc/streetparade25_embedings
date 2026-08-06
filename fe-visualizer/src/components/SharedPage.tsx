@@ -1,15 +1,21 @@
-import {MapPinned, Truck} from 'lucide-react';
-import {useState} from 'react';
+import {MapPinned, Play, Truck} from 'lucide-react';
+import {useEffect, useRef, useState} from 'react';
 import {parseTimeRange} from '../loveMobile';
 import type {SharedPayload, SharedTruck} from '../types';
 
 type TruckSort = 'score' | 'order';
+
+type ActiveTrack = {
+  label: string;
+  url: string;
+};
 
 export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload; onEnter: () => void}) {
   const trucks = Array.isArray(payload.likedTrucks) ? payload.likedTrucks : [];
   const artists = Array.isArray(payload.likedArtists) ? payload.likedArtists : [];
   const [sort, setSort] = useState<TruckSort>('score');
   const [minScore, setMinScore] = useState(0);
+  const [activeTrack, setActiveTrack] = useState<ActiveTrack | null>(null);
   const filteredTrucks = trucks.filter((truck) => truck.score >= minScore);
   const sortedTrucks = [...filteredTrucks].sort(sort === 'score' ? byScore : byOrder);
   return (
@@ -18,6 +24,8 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
         <p className="eyebrow"><Truck size={16} aria-hidden="true" /> Shared favorites</p>
         <h1>{payload.username || 'Someone'}&rsquo;s favorites</h1>
         <p className="muted">Street Parade 2026 acts this user liked or is likely to like, and the love mobiles where you can catch them.</p>
+
+        {activeTrack && <SoundCloudPlayer url={activeTrack.url} label={activeTrack.label} onClose={() => setActiveTrack(null)} />}
 
         <h2>Love mobiles</h2>
         {trucks.length ? (
@@ -34,6 +42,7 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
               <ul className="liked-trucks-list">
                 {sortedTrucks.map((truck, index) => {
                   const range = parseTimeRange(truck.time);
+                  const soundcloudUrl = truck.soundcloudUrl || '';
                   return (
                     <li key={`${truck.number}-${index}`}>
                       <span className="liked-truck-number">#{truck.number}</span>
@@ -44,6 +53,18 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
                         <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
                         {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
                       </span>
+                      {soundcloudUrl && (
+                        <button
+                          type="button"
+                          className="share-play-button"
+                          aria-label={`Play ${truck.name || truck.number}`}
+                          aria-pressed={activeTrack?.url === soundcloudUrl}
+                          onClick={() => setActiveTrack({label: truck.name || `Truck ${truck.number}`, url: soundcloudUrl})}
+                          title={`Play ${truck.name || truck.number} on SoundCloud`}
+                        >
+                          <Play size={16} aria-hidden="true" />
+                        </button>
+                      )}
                     </li>
                   );
                 })}
@@ -62,10 +83,23 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
             {artists.map((entry) => {
               const name = typeof entry === 'string' ? entry : entry.name;
               const score = typeof entry === 'string' ? null : entry.score;
+              const soundcloudUrl = typeof entry === 'string' ? '' : entry.soundcloudUrl || '';
               return (
                 <span className="shared-artist-chip" key={name}>
                   {name}
                   {score !== null && score !== undefined && Number.isFinite(score) && <span className="shared-artist-score">Like {formatScore(score)}</span>}
+                  {soundcloudUrl && (
+                    <button
+                      type="button"
+                      className="share-play-button chip"
+                      aria-label={`Play ${name}`}
+                      aria-pressed={activeTrack?.url === soundcloudUrl}
+                      onClick={() => setActiveTrack({label: name, url: soundcloudUrl})}
+                      title={`Play ${name} on SoundCloud`}
+                    >
+                      <Play size={14} aria-hidden="true" />
+                    </button>
+                  )}
                 </span>
               );
             })}
@@ -77,6 +111,63 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
         <button type="button" onClick={onEnter}><MapPinned size={18} aria-hidden="true" /> Explore the map</button>
       </section>
     </main>
+  );
+}
+
+function SoundCloudPlayer({url, label, onClose}: {url: string; label: string; onClose: () => void}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const widgetRef = useRef<SoundCloudWidgetApi | null>(null);
+  const [needsTap, setNeedsTap] = useState(false);
+
+  useEffect(() => {
+    setNeedsTap(false);
+    widgetRef.current = null;
+    const iframe = iframeRef.current;
+    const sc = window.SC;
+    if (!iframe || !sc?.Widget) {
+      setNeedsTap(true);
+      return;
+    }
+    const widget = sc.Widget(iframe);
+    widgetRef.current = widget;
+    widget.bind(sc.Widget.Events.READY, () => {
+      widget.play(() => setNeedsTap(false));
+      window.setTimeout(() => {
+        widget.isPaused((paused) => setNeedsTap(Boolean(paused)));
+      }, 700);
+    });
+  }, [url]);
+
+  function playInPage() {
+    const widget = widgetRef.current;
+    if (!widget) return;
+    widget.play(() => setNeedsTap(false));
+  }
+
+  return (
+    <div className="share-player">
+      <div className="share-player-header">
+        <span className="share-player-label">Now playing: <strong>{label}</strong></span>
+        <button type="button" className="secondary" onClick={onClose}>Close</button>
+      </div>
+      <div className="soundcloud-player">
+        <iframe
+          ref={iframeRef}
+          title="SoundCloud"
+          width="100%"
+          height="166"
+          scrolling="no"
+          frameBorder="no"
+          allow="autoplay"
+          src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=true&show_artwork=false&visual=false&buying=false&sharing=false&download=false&show_comments=false`}
+        />
+        {needsTap && (
+          <button type="button" className="inline-play" onClick={playInPage}>
+            Tap to play embedded track
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

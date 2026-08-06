@@ -235,6 +235,14 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .share-score-filter { display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; font-weight: 800; }
 .share-score-filter b { color: var(--accent); }
 .share-score-filter input[type="range"] { width: 100%; accent-color: var(--accent); }
+.share-play-button { flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--text); cursor: pointer; }
+.share-play-button:hover { background: var(--warm); color: #fff; }
+.share-play-button[aria-pressed="true"] { background: var(--warm); color: #fff; }
+.share-play-button.chip { align-self: center; width: 26px; height: 26px; }
+.share-player { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.055); }
+.share-player-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.share-player-label { color: var(--muted); font-size: 0.86rem; font-weight: 800; overflow-wrap: anywhere; }
+.share-player-label strong { color: var(--text); }
 
 @media (max-width: 979px) {
   .workspace .side { order: -1; }
