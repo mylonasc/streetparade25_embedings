@@ -162,6 +162,7 @@ export type ArtistSummary = {
   actualDown: number;
   predictedUp: number;
   predictedDown: number;
+  likeScore: number;
   artistPreference: PreferenceValue | null;
   loveMobiles: LoveMobile[];
 };
@@ -169,6 +170,7 @@ export type ArtistSummary = {
 export type LikedTruck = {
   truck: LoveMobile;
   artists: string[];
+  score: number;
 };
 
 export type SharedTruck = {
@@ -177,6 +179,7 @@ export type SharedTruck = {
   genres: string;
   time: string;
   artists: string[];
+  score: number;
 };
 
 export type SharedPayload = {

@@ -12,19 +12,21 @@ export function whatsAppShareUrl(link: string, text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`;
 }
 
-export function serializeLikedTrucks(trucks: {truck: {number?: number | string; source_index?: number; name?: string; title?: string; genres?: string; time?: string}; artists: string[]}[]): {
+export function serializeLikedTrucks(trucks: {truck: {number?: number | string; source_index?: number; name?: string; title?: string; genres?: string; time?: string}; artists: string[]; score?: number}[]): {
   number: string;
   name: string;
   genres: string;
   time: string;
   artists: string[];
+  score: number;
 }[] {
-  return trucks.map(({truck, artists}) => ({
+  return trucks.map(({truck, artists, score = 0}) => ({
     number: truckNumber(truck),
     name: truck.name || truck.title || '',
     genres: truck.genres || '',
     time: truck.time || '',
     artists,
+    score,
   }));
 }
 

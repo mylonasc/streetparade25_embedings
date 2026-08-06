@@ -9,11 +9,11 @@ import {
 } from './preferenceTraining';
 import type {EmbeddedTrack, LossPoint, TrainingOptions, TrainedPreferenceModel} from './preferenceTraining';
 import {buildSearchIndex, searchResults} from './search';
+import {buildArtistSummaries, buildLikedTrucks} from './artistSummary';
 import {playlistForPoint, preferenceKeyForPoint, preferenceTarget} from './selection';
 import {serializeLikedTrucks, shareBlurb} from './share';
 import {MARKS_KEY, USERNAME_KEY, readMarks, safeGetItem, safeSetItem} from './storage';
 import {useMobileViewport} from './responsive';
-import {truckNumber} from './loveMobile';
 import {BottomSheet} from './BottomSheet';
 import {Visualizer} from './components/Visualizer';
 import {Selection} from './components/Selection';
@@ -22,7 +22,7 @@ import {ArtistFavoritesPanel, PreferenceTrainingPanel, TrackRow, UsernameGate} f
 import {SharedFavoritesPage} from './components/SharedPage';
 import {ShareMenu} from './components/ShareMenu';
 import type {
-  ArtistSummary, Job, LayoutJob, LikedTruck, LoveMobile, Point, PointLike, Prediction, PreferenceValue, SharedPayload,
+  Job, LayoutJob, LoveMobile, Point, PointLike, Prediction, PreferenceValue, SharedPayload,
   SimilarityEdge, Stats, UserTrack, VisualizationFeatures, VisualizationPayload,
 } from './types';
 
@@ -508,22 +508,9 @@ export function App() {
   const preferenceTrainingDataset = useMemo(() => buildPreferenceDataset(embeddedTracks, thumbPreferences), [embeddedTracks, thumbPreferences]);
   const preferenceTrainingSummary = useMemo(() => summarizeExamples(preferenceTrainingDataset.examples, preferenceTrainingDataset.unlabeled), [preferenceTrainingDataset]);
   const artistSummaries = useMemo(() => buildArtistSummaries(points, thumbPreferences, predictedPreferences), [points, thumbPreferences, predictedPreferences]);
-  const likedTrucks = useMemo(() => {
-    const trucks = new Map<string, LikedTruck>();
-    for (const artist of artistSummaries) {
-      const isLoved = artist.artistPreference === 'up' || artist.predictedUp > artist.predictedDown;
-      if (!isLoved) continue;
-      for (const truck of artist.loveMobiles) {
-        const key = truck.uuid ?? `${truck.number ?? truck.source_index ?? truck.name ?? truck.title}`;
-        const existing = trucks.get(key);
-        if (existing) existing.artists.push(artist.name);
-        else trucks.set(key, {truck, artists: [artist.name]});
-      }
-    }
-    return Array.from(trucks.values()).sort((a, b) => String(truckNumber(a.truck)).localeCompare(String(truckNumber(b.truck)), undefined, {numeric: true}));
-  }, [artistSummaries]);
+  const likedTrucks = useMemo(() => buildLikedTrucks(artistSummaries), [artistSummaries]);
   const likedArtistNames = useMemo(
-    () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.predictedUp > artist.predictedDown).map((artist) => artist.name),
+    () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.likeScore > 0).map((artist) => artist.name),
     [artistSummaries],
   );
 
@@ -796,47 +783,6 @@ export function App() {
       {showLikedTrucks && <LikedTrucksModal trucks={likedTrucks} onCreateShare={createSharePage} onClose={() => setShowLikedTrucks(false)} />}
     </main>
   );
-}
-
-function buildArtistSummaries(points: Point[], thumbPreferences: Record<string, string>, predictedPreferences: Record<string, Prediction>): ArtistSummary[] {
-  const artistPoints = new Map(points.filter((point) => point.kind === 'artist').map((point) => [point.label, point as PointLike]));
-  const summaries = new Map<string, ArtistSummary>();
-  for (const point of points) {
-    if (!['track', 'user_track'].includes(point.kind)) continue;
-    const metadata = point.metadata || {};
-    const artistName = metadata.artist_name || metadata.artist;
-    if (!artistName) continue;
-    const artistPoint: PointLike = artistPoints.get(artistName) || {id: `artist-${slugForKey(artistName)}`, kind: 'artist', label: artistName, metadata: {artist_name: artistName}};
-    const summary = summaries.get(artistName) || {
-      key: artistPoint.id || `artist-${slugForKey(artistName)}`,
-      name: artistName,
-      point: artistPoint,
-      trackCount: 0,
-      actualUp: 0,
-      actualDown: 0,
-      predictedUp: 0,
-      predictedDown: 0,
-      artistPreference: (thumbPreferences?.[preferenceKeyForPoint(artistPoint) ?? ''] as PreferenceValue | undefined) || null,
-      loveMobiles: Array.isArray(artistPoint.metadata?.love_mobiles) ? artistPoint.metadata.love_mobiles : [],
-    };
-    const actual = thumbPreferences?.[preferenceKeyForPoint(point) ?? ''];
-    const predicted = predictedPreferences?.[preferenceKeyForPoint(point) ?? ''];
-    summary.trackCount += 1;
-    if (actual === 'up') summary.actualUp += 1;
-    if (actual === 'down') summary.actualDown += 1;
-    if (!actual && predicted?.value === 'up') summary.predictedUp += 1;
-    if (!actual && predicted?.value === 'down') summary.predictedDown += 1;
-    summaries.set(artistName, summary);
-  }
-  return Array.from(summaries.values()).sort((a, b) => {
-    const aStrength = Math.max(a.actualUp + a.predictedUp, a.actualDown + a.predictedDown);
-    const bStrength = Math.max(b.actualUp + b.predictedUp, b.actualDown + b.predictedDown);
-    return bStrength - aStrength || b.trackCount - a.trackCount || a.name.localeCompare(b.name);
-  });
-}
-
-function slugForKey(value: string): string {
-  return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
 }
 
 function selectedVectorId(point: Point | null): string | null {

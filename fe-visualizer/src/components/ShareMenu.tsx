@@ -8,9 +8,10 @@ export type SharedMenuPayload = {
   text: string;
 };
 
-export function ShareMenu({link, text, onPrepare}: {
+export function ShareMenu({link, text, label, onPrepare}: {
   link?: string;
   text?: string;
+  label?: string;
   onPrepare?: () => Promise<SharedMenuPayload>;
 }) {
   const [open, setOpen] = useState(false);
@@ -83,7 +84,8 @@ export function ShareMenu({link, text, onPrepare}: {
 
   return (
     <div className="share-menu" ref={rootRef}>
-      <button type="button" className="secondary icon-button" aria-label="Share" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+      <button type="button" className={`secondary share-trigger ${label ? 'labeled' : 'icon-button'}`} aria-label={label || 'Share'} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        {label && <span>{label}</span>}
         <Share2 size={20} aria-hidden="true" />
       </button>
       {open && (

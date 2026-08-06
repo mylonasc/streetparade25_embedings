@@ -68,7 +68,7 @@ export type TrainedPreferenceModel = {
 };
 
 export const DEFAULT_TRAINING_OPTIONS: TrainingOptions = {
-  epochs: 40,
+  epochs: 5,
   batchSize: 16,
   hiddenUnits: 1024,
   dropoutRate: 0.3,

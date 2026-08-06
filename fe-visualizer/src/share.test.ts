@@ -18,11 +18,11 @@ describe('whatsAppShareUrl', () => {
 describe('serializeLikedTrucks', () => {
   it('flattens love mobiles into a serializable snapshot', () => {
     expect(serializeLikedTrucks([
-      {truck: {number: 9, name: 'Magic Mountain', genres: 'Tech House', time: '15:04–19:04'}, artists: ['Cosmic Circle']},
+      {truck: {number: 9, name: 'Magic Mountain', genres: 'Tech House', time: '15:04–19:04'}, artists: ['Cosmic Circle'], score: 0.83},
       {truck: {source_index: 3, title: 'Bass Wagon', time: '20:00–00:00'}, artists: ['DJ Bass']},
     ])).toEqual([
-      {number: '9', name: 'Magic Mountain', genres: 'Tech House', time: '15:04–19:04', artists: ['Cosmic Circle']},
-      {number: '3', name: 'Bass Wagon', genres: '', time: '20:00–00:00', artists: ['DJ Bass']},
+      {number: '9', name: 'Magic Mountain', genres: 'Tech House', time: '15:04–19:04', artists: ['Cosmic Circle'], score: 0.83},
+      {number: '3', name: 'Bass Wagon', genres: '', time: '20:00–00:00', artists: ['DJ Bass'], score: 0},
     ]);
   });
 });

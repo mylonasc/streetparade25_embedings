@@ -248,7 +248,7 @@ export function LikedTrucksModal({trucks, onClose, onCreateShare}: {trucks: Like
             <p>All trucks of acts you liked or are likely to like, with their set times.</p>
           </div>
           <div className="modal-header-actions">
-            <ShareMenu onPrepare={onCreateShare} />
+            <ShareMenu label="Share" onPrepare={onCreateShare} />
             <button type="button" className="secondary" onClick={onClose}>Close</button>
           </div>
         </div>
@@ -263,6 +263,7 @@ export function LikedTrucksModal({trucks, onClose, onCreateShare}: {trucks: Like
                     <span className="liked-truck-time">{parseTimeRange(entry.truck.time)!.start}–{parseTimeRange(entry.truck.time)!.end}</span>
                   )}
                   {entry.truck.genres && <span className="muted">{entry.truck.genres}</span>}
+                  <span className="liked-truck-score">Score {formatScore(entry.score)}</span>
                   {entry.artists.length > 0 && <span className="muted">Acts: {entry.artists.join(', ')}</span>}
                 </span>
               </li>
@@ -274,4 +275,9 @@ export function LikedTrucksModal({trucks, onClose, onCreateShare}: {trucks: Like
       </section>
     </div>
   );
+}
+
+function formatScore(score: number | null | undefined): string {
+  if (score === null || score === undefined || !Number.isFinite(score)) return 'n/a';
+  return Number(score).toFixed(2);
 }

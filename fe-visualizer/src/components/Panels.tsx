@@ -34,6 +34,8 @@ export function PreferenceTrainingPanel({options, setOptions, summary, status, b
       </div>
       <div className="training-options">
         <label>Epochs<input type="number" min="1" max="300" value={options.epochs} onChange={(event) => setOptions({...options, epochs: Number(event.target.value)})} /></label>
+        <label>Hidden units<input type="number" min="8" max="4096" step="8" value={options.hiddenUnits} onChange={(event) => setOptions({...options, hiddenUnits: Number(event.target.value)})} /></label>
+        <label>Dropout<input type="number" min="0" max="0.9" step="0.05" value={options.dropoutRate} onChange={(event) => setOptions({...options, dropoutRate: Number(event.target.value)})} /></label>
         <label>Seed<input type="number" min="0" max="999999999" value={options.randomSeed} onChange={(event) => setOptions({...options, randomSeed: Number(event.target.value)})} /></label>
       </div>
       <button type="button" onClick={() => void onTrain()} disabled={busy || !summary.canTrain}>{busy ? 'Working...' : 'Train model'}</button>
@@ -119,7 +121,7 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
     }
   }, [modelAvailable]);
   const visibleArtists = artists.filter((artist) => {
-    if (filter === 'likely') return artist.predictedUp > artist.predictedDown;
+    if (filter === 'likely') return artist.likeScore > 0;
     if (filter === 'unliked') return artist.predictedDown > artist.predictedUp;
     if (filter === 'liked') return artist.artistPreference === 'up';
     if (filter === 'manual') return Boolean(artist.artistPreference);
@@ -130,9 +132,10 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
     <section className="panel artist-favorites-panel">
       <div className="panel-title-row">
         <h2>Artist favorites</h2>
-        <button type="button" className="secondary icon-button truck-heart-button" aria-label="Show loved trucks" onClick={onShowLikedTrucks} title="Show the love mobiles of liked and likely-liked acts">
-          <Truck size={18} aria-hidden="true" />
-          <Heart size={12} aria-hidden="true" className="truck-heart-badge" />
+        <button type="button" className="secondary truck-heart-button" aria-label="Show loved trucks" onClick={onShowLikedTrucks} title="Show the love mobiles of liked and likely-liked acts">
+          <Heart size={16} aria-hidden="true" />
+          <Truck size={16} aria-hidden="true" />
+          <span>View</span>
         </button>
       </div>
       <p className="muted">Rank artists by actual and predicted song preferences, then mark artists liked or unliked.</p>
@@ -146,7 +149,13 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
       <div className="artist-favorites-list">
         {visibleArtists.map((artist) => (
           <article className="artist-favorite-row" key={artist.key}>
-            <button type="button" className="artist-title" onClick={() => onSelect(artist.point)}>{artist.name}</button>
+            <div className="artist-favorite-header">
+              <button type="button" className="artist-title" onClick={() => onSelect(artist.point)}>{artist.name}</button>
+              <div className="artist-favorite-actions">
+                <button type="button" className={`secondary thumb-button thumb-up ${artist.artistPreference === 'up' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'up')} aria-pressed={artist.artistPreference === 'up'}><ThumbsUp size={18} aria-hidden="true" /></button>
+                <button type="button" className={`secondary thumb-button thumb-down ${artist.artistPreference === 'down' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'down')} aria-pressed={artist.artistPreference === 'down'}><ThumbsDown size={18} aria-hidden="true" /></button>
+              </div>
+            </div>
             {artist.loveMobiles.length > 0 && (
               <div className="artist-love-mobiles" aria-label="Love mobiles">
                 {artist.loveMobiles.map((loveMobile) => {
@@ -162,13 +171,9 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
               </div>
             )}
             <div className="artist-score-grid">
-              <span>Actual +{artist.actualUp} / -{artist.actualDown}</span>
+              <span>Like <b>{artist.likeScore.toFixed(2)}</b></span>
               <span>Pred +{artist.predictedUp} / -{artist.predictedDown}</span>
               <span>{artist.trackCount} songs</span>
-            </div>
-            <div className="artist-favorite-actions">
-              <button type="button" className={`secondary thumb-button thumb-up ${artist.artistPreference === 'up' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'up')} aria-pressed={artist.artistPreference === 'up'}><ThumbsUp size={18} aria-hidden="true" /></button>
-              <button type="button" className={`secondary thumb-button thumb-down ${artist.artistPreference === 'down' ? 'active' : ''}`} onClick={() => onPreference(artist.point, 'down')} aria-pressed={artist.artistPreference === 'down'}><ThumbsDown size={18} aria-hidden="true" /></button>
             </div>
           </article>
         ))}

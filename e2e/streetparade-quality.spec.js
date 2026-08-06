@@ -33,6 +33,7 @@ const OVERLAP_GROUPS = [
   '.gate-card',
   '.training-options',
   '.artist-favorite-actions',
+  '.artist-favorite-header',
   '.artist-love-mobiles',
   '.artist-favorites-empty',
   '.modal-header-actions',

@@ -24,6 +24,7 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
                     <strong>{truck.name}</strong>
                     {range && <span className="liked-truck-time">{range.start}–{range.end}</span>}
                     {truck.genres && <span className="muted">{truck.genres}</span>}
+                    <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
                     {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
                   </span>
                 </li>
@@ -47,4 +48,9 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
       </section>
     </main>
   );
+}
+
+function formatScore(score: number | null | undefined): string {
+  if (score === null || score === undefined || !Number.isFinite(score)) return 'n/a';
+  return Number(score).toFixed(2);
 }
