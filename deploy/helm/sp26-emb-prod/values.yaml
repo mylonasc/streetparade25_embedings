@@ -13,7 +13,7 @@ image:
 api:
   replicaCount: 1
   image:
-    tag: api-minimal-0.1.3
+    tag: api-minimal-0.1.4-ce9ab168ba1c
   service:
     type: ClusterIP
     port: 8000
@@ -38,7 +38,7 @@ api:
 visualizer:
   replicaCount: 1
   image:
-    tag: visualizer-0.1.12-d17cf881e5fe
+    tag: visualizer-0.1.13-ce9ab168ba1c
   service:
     type: ClusterIP
     webPort: 80
