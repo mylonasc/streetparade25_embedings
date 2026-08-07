@@ -58,6 +58,8 @@ input:disabled, select:disabled { cursor: not-allowed; color: rgba(239, 246, 255
 .icon-button svg { width: 20px; height: 20px; }
 .toolbar-text-button { padding-inline: 12px; }
 .toggle-button { padding-inline: 12px; }
+.toggle-button.toggle-icon { width: 38px; height: 38px; min-height: 38px; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; }
+.toggle-button.toggle-icon svg { width: 20px; height: 20px; }
 .toggle-button.active { color: #06100c; background: var(--accent); }
 .toggle-button.active.predicted { background: #b7ffd9; }
 .empty-warning { position: absolute; z-index: 4; left: 16px; right: 16px; top: 128px; padding: 12px 14px; border: 1px solid rgba(255, 181, 168, 0.4); border-radius: 16px; color: #ffb5a8; background: rgba(80, 24, 18, 0.78); }
@@ -140,6 +142,19 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .playlist-track:hover, .playlist-track.active { transform: none; color: #06100c; background: var(--accent); }
 .playlist-track span { color: inherit; opacity: 0.68; font-size: 0.82rem; font-weight: 900; }
 .playlist-track strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.truck-view { display: grid; gap: 12px; margin-top: 4px; }
+.truck-score-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.06); }
+.truck-score-row span { color: var(--muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.truck-score-row b { color: var(--accent); font-size: 1.12rem; }
+.truck-facts { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 6px 12px; margin: 0; }
+.truck-facts dt { color: var(--muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.truck-facts dd { margin: 0; font-size: 0.88rem; }
+.truck-artist-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 9px 10px; border-radius: 14px; color: var(--text); background: rgba(255,255,255,0.06); text-align: left; }
+.truck-artist-row:hover { transform: none; color: #06100c; background: var(--accent); }
+.truck-artist-row span { color: inherit; opacity: 0.68; font-size: 0.82rem; font-weight: 900; }
+.truck-artist-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.truck-artist-songs { justify-self: end; }
+.eyebrow svg { vertical-align: -2px; margin-right: 2px; }
 .actions { display: grid; gap: 10px; }
 .training-panel { display: grid; gap: 10px; }
 .training-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -271,7 +286,7 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
   .plot { height: clamp(520px, 58vw, 820px); }
   .map-toolbar { left: 28px; right: 28px; top: 26px; bottom: auto; justify-content: flex-end; overflow: visible; gap: 8px; }
   .map-toolbar button { min-height: 44px; font-size: 1rem; }
-  .icon-button { width: 44px; height: 44px; min-height: 44px; font-size: 1.2rem; }
+  .icon-button, .toggle-button.toggle-icon { width: 44px; height: 44px; min-height: 44px; font-size: 1.2rem; }
   .map-search { left: 28px; right: auto; top: auto; bottom: 26px; width: min(520px, calc(100% - 56px)); }
   .empty-warning { left: 28px; right: 28px; top: 78px; }
   .feature-warning { top: 78px; }

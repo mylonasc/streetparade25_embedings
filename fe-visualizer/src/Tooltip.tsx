@@ -1,17 +1,18 @@
-import {Play, SkipForward, ThumbsDown, ThumbsUp} from 'lucide-react';
+import {Play, SkipForward, ThumbsDown, ThumbsUp, Truck} from 'lucide-react';
 import type {ReactNode} from 'react';
 import type {Edge, Point, PreferenceValue} from './types';
 
 export type TooltipHandlers = {
   onThumb: (point: Point, value: PreferenceValue) => void;
   onSelectArtist?: (point: Point) => void;
+  onSelectTruck?: (point: Point) => void;
   onPlayArtistSong?: (point: Point) => void;
   onPlaySimilar?: () => void;
   onRandomSong?: () => void;
 };
 
 export type TooltipData =
-  | {type: 'point'; point: Point; thumbValue: PreferenceValue | null | undefined}
+  | {type: 'point'; point: Point; thumbValue: PreferenceValue | null | undefined; truckScore?: number}
   | {type: 'edge'; edge: Edge; byId: Map<string, Point>};
 
 function ThumbButtons({value, onThumb}: {value: PreferenceValue | null | undefined; onThumb: (value: PreferenceValue) => void}) {
@@ -39,8 +40,23 @@ function ThumbButtons({value, onThumb}: {value: PreferenceValue | null | undefin
   );
 }
 
-function PointTooltipContent({point, thumbValue, handlers}: {point: Point; thumbValue: PreferenceValue | null | undefined; handlers: TooltipHandlers}) {
+function PointTooltipContent({point, thumbValue, truckScore, handlers}: {point: Point; thumbValue: PreferenceValue | null | undefined; truckScore: number | undefined; handlers: TooltipHandlers}) {
   const metadata = point.metadata || {};
+  if (point.kind === 'truck') {
+    const artistNames = Array.isArray(metadata.artist_names) ? metadata.artist_names : [];
+    return (
+      <>
+        <strong>{point.label}</strong>
+        <span>Like score: {truckScore !== undefined && truckScore !== null ? truckScore.toFixed(2) : 'n/a'}</span>
+        <span>Artists: {artistNames.length ? artistNames.join(', ') : 'None on map'}</span>
+        {point.cluster !== undefined && <span>Cluster: {point.cluster}</span>}
+        <div className="tooltip-actions">
+          {handlers.onPlayArtistSong && <button type="button" aria-label="Play truck song" onClick={() => handlers.onPlayArtistSong?.(point)}><Play size={18} aria-hidden="true" /> song</button>}
+          {handlers.onRandomSong && <button type="button" aria-label="Random song" onClick={handlers.onRandomSong}><SkipForward size={18} aria-hidden="true" /></button>}
+        </div>
+      </>
+    );
+  }
   if (point.kind === 'track' || point.kind === 'user_track') {
     const rows: Array<[string, string | number | null]> = [
       ['Artist', metadata.artist_name || metadata.artist || 'Unknown'],
@@ -73,6 +89,7 @@ function PointTooltipContent({point, thumbValue, handlers}: {point: Point; thumb
         <div className="tooltip-actions">
           <ThumbButtons value={thumbValue} onThumb={(value) => handlers.onThumb(point, value)} />
           {handlers.onPlayArtistSong && <button type="button" aria-label="Select artist song" onClick={() => handlers.onPlayArtistSong?.(point)}><Play size={18} aria-hidden="true" /> song</button>}
+          {handlers.onSelectTruck && <button type="button" aria-label="Select truck" onClick={() => handlers.onSelectTruck?.(point)}><Truck size={18} aria-hidden="true" /></button>}
           {handlers.onRandomSong && <button type="button" aria-label="Random song" onClick={handlers.onRandomSong}><SkipForward size={18} aria-hidden="true" /></button>}
         </div>
       </>
@@ -114,5 +131,5 @@ function EdgeTooltipContent({edge, byId}: {edge: Edge; byId: Map<string, Point>}
 
 export function TooltipContent({data, handlers}: {data: TooltipData; handlers: TooltipHandlers}): ReactNode {
   if (data.type === 'edge') return <EdgeTooltipContent edge={data.edge} byId={data.byId} />;
-  return <PointTooltipContent point={data.point} thumbValue={data.thumbValue} handlers={handlers} />;
+  return <PointTooltipContent point={data.point} thumbValue={data.thumbValue} truckScore={data.truckScore} handlers={handlers} />;
 }

@@ -175,16 +175,26 @@ export function HelpModal({onClose}: {onClose: () => void}) {
         <div className="help-content">
           <h3>Navigate</h3>
           <p>Drag the map to pan. Scroll or pinch to zoom. Double-click the canvas to reset the zoom.</p>
-          <p>Use the search box to find artists, songs, URLs, or other visible metadata. Use the Tracks and Artists buttons to hide or show each type.</p>
+          <p>Use the search box to find artists, songs, URLs, or other visible metadata. The map toolbar toggles each node type: the music-note button shows or hides tracks, the DJ button artists, and the truck button love mobiles.</p>
+
+          <h3>Rate Songs And Artists</h3>
+          <p>Click a song or artist to focus it, then rate it with the thumb buttons — up to like, down to unlike. Rates are saved for your user and drive the ranking in the Artists tab.</p>
+
+          <h3>Train A Preference Model</h3>
+          <p>Open the Training tab to train a model on your likes and unlikes. The model is saved in this browser. Once trained, the Predicted toggle colors every unrated song by the model's prediction, so the rest of the map gets ranked for you.</p>
+          <p>Artists and love-mobile trucks use the same like score — a truck's score is the average of the artists that play on it, and its color reflects how much you'd like it.</p>
 
           <h3>Select And Listen</h3>
-          <p>Click a song or artist to focus it. The selected item stays highlighted and unrelated points dim so you can see its context.</p>
+          <p>Click a song or artist to focus it. The selected item stays highlighted and unrelated points dim so you can see its context. Selecting a truck highlights its connections to the artists that play on it.</p>
           <p>When a song is selected, playback appears below the canvas. Reset selection clears the focus but keeps the current song playing.</p>
           <p>The toolbar arrows undo and redo selection history.</p>
 
           <h3>Similarity And Clusters</h3>
           <p>When you select a song, linked songs show similar tracks. Hover an edge to see similarity details. In song tooltips, the play button selects a similar song and the fast-forward button jumps to a random song.</p>
-          <p>Use the cluster dropdown to highlight one cluster. The Selection panel can also highlight the selected item’s cluster.</p>
+          <p>Use the cluster dropdown to highlight one cluster.</p>
+
+          <h3>Share Your Favorites</h3>
+          <p>The Share menu builds a link with your preferences — liked artists and loved trucks — ready to send on Telegram or WhatsApp.</p>
 
           <h3>How It Was Made</h3>
           <p>Each track is converted into an audio embedding: a numeric representation of how the model hears the sound.</p>

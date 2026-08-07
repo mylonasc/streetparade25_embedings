@@ -1,4 +1,4 @@
-import {CircleHelp, Pause, Play, Redo2, ThumbsDown, ThumbsUp, Undo2} from 'lucide-react';
+import {CircleHelp, Disc3, Music, Pause, Play, Redo2, ThumbsDown, ThumbsUp, Truck, Undo2} from 'lucide-react';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {getUserPreferences, request, setUserPreference} from './api';
 import {DEFAULT_LAYOUT_OPTIONS, layoutPayload, optionalNumber} from './layoutOptions';
@@ -10,6 +10,8 @@ import {
 import type {EmbeddedTrack, LossPoint, TrainingOptions, TrainedPreferenceModel} from './preferenceTraining';
 import {buildSearchIndex, searchResults} from './search';
 import {buildArtistSummaries, buildLikedTrucks} from './artistSummary';
+import {buildTruckSummaries, pickTruckArtist} from './truckSummary';
+import type {TruckSummaries} from './truckSummary';
 import {playlistForPoint, preferenceKeyForPoint, preferenceTarget} from './selection';
 import {serializeLikedTrucks, shareBlurb, soundcloudUrlFromTracks} from './share';
 import {MARKS_KEY, USERNAME_KEY, readMarks, safeGetItem, safeSetItem} from './storage';
@@ -28,7 +30,7 @@ import type {
 
 const SONG_DOWNLOADS_BUILD_ENABLED = import.meta.env.VITE_ENABLE_SONG_DL_AND_EMBEDINGS !== 'false';
 const VISUALIZATION_CACHE_VERSION = 1;
-const EMPTY_STATS: Stats = {point_count: 0, base_point_count: 0, artist_point_count: 0, user_point_count: 0};
+const EMPTY_STATS: Stats = {point_count: 0, base_point_count: 0, artist_point_count: 0, truck_point_count: 0, user_point_count: 0};
 
 type VisualizationCache = {version: number; signature: string; cachedAt: number; payload: VisualizationPayload};
 type FocusRequest = {pointId: string; nonce: number};
@@ -96,6 +98,7 @@ export function App() {
   const [colorByPreference, setColorByPreference] = useState(false);
   const [showArtists, setShowArtists] = useState(true);
   const [showSongs, setShowSongs] = useState(true);
+  const [showTrucks, setShowTrucks] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const [selectionMinimized, setSelectionMinimized] = useState(false);
@@ -158,6 +161,7 @@ export function App() {
       point_count: viz.point_count || 0,
       base_point_count: viz.base_point_count || 0,
       artist_point_count: viz.artist_point_count || 0,
+      truck_point_count: viz.truck_point_count || 0,
       user_point_count: viz.user_point_count || 0,
     });
   }
@@ -308,10 +312,44 @@ export function App() {
   }
 
   function selectArtistForSong(point: Point): void {
+    if (point.kind === 'truck') {
+      const artist = pickTruckArtist(point, truckSummaries);
+      if (artist) selectPoint(artist.point, {focus: true});
+      return;
+    }
     const artistName = point?.metadata?.artist_name || point?.metadata?.artist;
     if (!artistName) return;
     const artistPoint = points.find((candidate) => candidate.kind === 'artist' && (candidate.metadata?.artist_name || candidate.label) === artistName);
     if (artistPoint) selectPoint(artistPoint, {focus: true});
+  }
+
+  function selectArtistByName(name: string): void {
+    const artistPoint = points.find((candidate) => candidate.kind === 'artist' && (candidate.metadata?.artist_name || candidate.label) === name);
+    if (artistPoint) selectPoint(artistPoint, {focus: true});
+  }
+
+  function selectTruckForArtist(point: Point): void {
+    const artistName = point?.metadata?.artist_name || point?.metadata?.artist || point?.label;
+    if (!artistName) return;
+    const truckPoint = points.find((candidate) => candidate.kind === 'truck' && (candidate.metadata?.artist_names || []).includes(artistName));
+    if (truckPoint) selectPoint(truckPoint, {focus: true});
+  }
+
+  function playPointSong(point: Point): void {
+    if (point.kind === 'truck') {
+      const artist = pickTruckArtist(point, truckSummaries);
+      const firstTrackId = artist?.point.metadata?.tracks?.[0]?.id;
+      const songPoint = firstTrackId !== undefined && firstTrackId !== null
+        ? points.find((candidate) => candidate.id === firstTrackId)
+        : null;
+      if (songPoint) {
+        selectPoint(songPoint, {focus: true});
+        return;
+      }
+      selectPoint(point, {focus: true});
+      return;
+    }
+    selectRandomArtistSong(point);
   }
 
   function selectRandomArtistSong(point: Point): void {
@@ -509,6 +547,11 @@ export function App() {
   const preferenceTrainingSummary = useMemo(() => summarizeExamples(preferenceTrainingDataset.examples, preferenceTrainingDataset.unlabeled), [preferenceTrainingDataset]);
   const artistSummaries = useMemo(() => buildArtistSummaries(points, thumbPreferences, predictedPreferences), [points, thumbPreferences, predictedPreferences]);
   const likedTrucks = useMemo(() => buildLikedTrucks(artistSummaries), [artistSummaries]);
+  const truckSummaries = useMemo(() => buildTruckSummaries(points, artistSummaries), [points, artistSummaries]);
+  const truckScores = useMemo(
+    () => Object.fromEntries(Array.from(truckSummaries.values()).map((summary) => [summary.point.id, summary.likeScore])),
+    [truckSummaries],
+  );
   const likedArtists = useMemo(
     () => artistSummaries.filter((artist) => artist.artistPreference === 'up' || artist.likeScore > 0).map((artist) => ({
       name: artist.name,
@@ -610,7 +653,8 @@ export function App() {
     return <UsernameGate draftUsername={draftUsername} setDraftUsername={setDraftUsername} saveUsername={saveUsername} error={error} />;
   }
 
-  const activePoint = selected || playbackPoint;
+  const activePoint = enrichActivePoint(selected || playbackPoint, truckSummaries);
+  const activeTruckSummary = activePoint?.kind === 'truck' ? truckSummaries.get(activePoint.id) : undefined;
   const activeThumbKey = activePoint ? preferenceKeyForPoint(activePoint) ?? '' : '';
   const canThumb = Boolean(activePoint && ['track', 'user_track', 'artist'].includes(activePoint.kind));
   const canPlay = (activePoint ? playlistForPoint(activePoint) : []).some((track) => track.soundcloudUrl || track.localUrl);
@@ -660,8 +704,9 @@ export function App() {
               <button type="button" className="secondary toolbar-text-button" onClick={resetSelection} disabled={!selected}>Reset</button>
               <button type="button" className="secondary icon-button" aria-label="Undo selection" onClick={undoSelection} disabled={!selectionUndoStack.length}><Undo2 size={20} aria-hidden="true" /></button>
               <button type="button" className="secondary icon-button" aria-label="Redo selection" onClick={redoSelection} disabled={!selectionRedoStack.length}><Redo2 size={20} aria-hidden="true" /></button>
-              <button type="button" className={`secondary toggle-button ${showSongs ? 'active' : ''}`} onClick={() => setShowSongs((value) => !value)}>Tracks</button>
-              <button type="button" className={`secondary toggle-button ${showArtists ? 'active' : ''}`} onClick={() => setShowArtists((value) => !value)}>Artists</button>
+              <button type="button" className={`secondary toggle-button toggle-icon ${showSongs ? 'active' : ''}`} aria-label="Toggle tracks" aria-pressed={showSongs} title="Toggle tracks" onClick={() => setShowSongs((value) => !value)}><Music size={20} aria-hidden="true" /></button>
+              <button type="button" className={`secondary toggle-button toggle-icon ${showArtists ? 'active' : ''}`} aria-label="Toggle artists" aria-pressed={showArtists} title="Toggle artists" onClick={() => setShowArtists((value) => !value)}><Disc3 size={20} aria-hidden="true" /></button>
+              <button type="button" className={`secondary toggle-button toggle-icon ${showTrucks ? 'active' : ''}`} aria-label="Toggle trucks" aria-pressed={showTrucks} title="Toggle trucks" onClick={() => setShowTrucks((value) => !value)}><Truck size={20} aria-hidden="true" /></button>
               <button type="button" className="secondary icon-button" aria-label="Help" onClick={() => setShowHelp(true)}><CircleHelp size={20} aria-hidden="true" /></button>
             </div>
             {!visualizationLoading && stats.base_point_count === 0 && (
@@ -669,7 +714,7 @@ export function App() {
                 No Street Parade vectors loaded. Check that the API can access the Chroma vector store, especially `./chroma` when using Docker.
               </div>
             )}
-            <Visualizer points={points} loading={visualizationLoading} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} predictedPreferences={predictedPreferences} colorByPreference={colorByPreference} colorByPredictedPreference={colorByPredictedPreference} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} focusRequest={focusRequest} onCanvasClick={() => setSelectionMinimized(true)} onSelectArtist={selectArtistForSong} onPlayArtistSong={selectRandomArtistSong} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
+            <Visualizer points={points} loading={visualizationLoading} selected={selected} setSelected={selectPoint} marks={marks} thumbPreferences={thumbPreferences} predictedPreferences={predictedPreferences} colorByPreference={colorByPreference} colorByPredictedPreference={colorByPredictedPreference} onThumb={toggleThumb} edges={similarityEdges} linkedPointIds={linkedTrackIds} hasSearch={Boolean(searchQuery.trim())} searchMatchIds={searchMatchIds} selectedCluster={selectedCluster} showArtists={showArtists} showSongs={showSongs} showTrucks={showTrucks} truckScores={truckScores} focusRequest={focusRequest} onCanvasClick={() => setSelectionMinimized(true)} onSelectArtist={selectArtistForSong} onSelectTruck={selectTruckForArtist} onPlayArtistSong={playPointSong} onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, selected, selectPoint)} onRandomSong={() => selectRandomSong(true)} />
           </section>
 
           <section className="panel actions">
@@ -735,8 +780,12 @@ export function App() {
                 canUndo={selectionUndoStack.length > 0}
                 canRedo={selectionRedoStack.length > 0}
                 onSelectArtist={() => selectArtistForSong(activePoint)}
+                onSelectTruck={() => selectTruckForArtist(activePoint)}
                 onPlaySimilar={() => selectRandomLinkedSong(similarityEdges, points, activePoint, selectPoint)}
                 onRandomSong={() => selectRandomSong(true)}
+                truckLikeScore={activeTruckSummary?.likeScore}
+                truckArtists={activeTruckSummary?.artists}
+                onSelectTruckArtist={selectArtistByName}
               />
             ) : <p className="muted">Click a point on the map.</p>}
           </BottomSheet>
@@ -802,8 +851,30 @@ function pointsByTrackId(points: Point[]): Map<string, Point> {
   return map;
 }
 
+function enrichActivePoint(point: Point | null, truckSummaries: TruckSummaries): Point | null {
+  if (!point || point.kind !== 'truck') return point;
+  const summary = truckSummaries.get(point.id);
+  if (!summary) return point;
+  const artist = pickTruckArtist(point, truckSummaries);
+  const tracks = artist?.point.metadata?.tracks || [];
+  const bestSong = tracks.find((track) => Boolean(track.url));
+  if (!bestSong) return point;
+  return {
+    ...point,
+    metadata: {...point.metadata, best_song: {title: bestSong.title || artist?.name || point.label, url: bestSong.url}},
+  };
+}
+
 function linksForSelection(selected: Point | null, points: Point[]): SimilarityEdge[] {
-  if (!selected || selected.kind !== 'artist') return [];
+  if (!selected) return [];
+  if (selected.kind === 'truck') {
+    const artistNames = Array.isArray(selected.metadata?.artist_names) ? selected.metadata?.artist_names || [] : [];
+    return artistNames
+      .map((name) => points.find((candidate) => candidate.kind === 'artist' && (candidate.metadata?.artist_name || candidate.label) === name))
+      .filter((artistPoint): artistPoint is Point => Boolean(artistPoint))
+      .map((artistPoint) => ({source: selected.id, target: artistPoint.id, similarity: null, distance: null}));
+  }
+  if (selected.kind !== 'artist') return [];
   const byTrackId = pointsByTrackId(points);
   return (selected.metadata?.tracks || [])
     .map((track) => byTrackId.get(String(track.track_id)))

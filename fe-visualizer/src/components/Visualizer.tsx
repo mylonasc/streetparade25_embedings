@@ -27,9 +27,12 @@ type VisualizerProps = {
   selectedCluster: number | null;
   showArtists: boolean;
   showSongs: boolean;
+  showTrucks: boolean;
+  truckScores: Record<string, number>;
   focusRequest: {pointId: string; nonce: number} | null;
   onCanvasClick: () => void;
   onSelectArtist: (point: Point) => void;
+  onSelectTruck: (point: Point) => void;
   onPlayArtistSong: (point: Point) => void;
   onPlaySimilar: () => void;
   onRandomSong: () => void;
@@ -42,7 +45,13 @@ function pointFill(
   predictedPreferences: Record<string, Prediction>,
   colorByPreference: boolean,
   colorByPredictedPreference: boolean,
+  truckScores: Record<string, number>,
 ): string {
+  if (point.kind === 'truck') {
+    const score = truckScores?.[point.id] ?? 0;
+    if (score >= 0.35) return '#85f5c4';
+    return '#ffd166';
+  }
   if (colorByPreference) {
     const preference = thumbPreferences?.[preferenceKeyForPoint(point) ?? ''];
     if (preference === 'up') return '#85f5c4';
@@ -123,8 +132,8 @@ export function Visualizer(props: VisualizerProps) {
   const {
     points, loading, selected, setSelected, marks, thumbPreferences, predictedPreferences,
     colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch,
-    searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick,
-    onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong,
+    searchMatchIds, selectedCluster, showArtists, showSongs, showTrucks, truckScores, focusRequest, onCanvasClick,
+    onSelectArtist, onSelectTruck, onPlayArtistSong, onPlaySimilar, onRandomSong,
   } = props;
 
   const ref = useRef<HTMLCanvasElement | null>(null);
@@ -207,7 +216,9 @@ export function Visualizer(props: VisualizerProps) {
     const color = d3.scaleOrdinal<string, string>(d3.schemeTableau10.concat(d3.schemeSet3));
     const clusterColor = (cluster: number | null) => color(String(cluster));
     const byId = new Map(points.map((point) => [point.id, point]));
-    const isVisible = (point: Point | null | undefined) => Boolean(point && (point.kind === 'artist' ? showArtists : showSongs));
+    const isVisible = (point: Point | null | undefined) => Boolean(
+      point && (point.kind === 'artist' ? showArtists : point.kind === 'truck' ? showTrucks : showSongs),
+    );
     const markerScale = (scale: number) => Math.max(0.65, 1 / Math.sqrt(Math.max(1, scale)));
     const symbol = d3.symbol().context(context);
     const screenPoint = (point: Point): [number, number] => [transformRef.current.applyX(x(point.x)), transformRef.current.applyY(y(point.y))];
@@ -218,14 +229,16 @@ export function Visualizer(props: VisualizerProps) {
 
     function pointState(point: Point) {
       const isSelected = selected?.id === point.id;
+      const isTruck = point.kind === 'truck';
+      const truckScore = isTruck ? (truckScores?.[point.id] ?? 0) : 0;
       const hasThumbPreference = Boolean(thumbPreferences?.[preferenceKeyForPoint(point) ?? '']);
       const hasPredictedPreference = Boolean(predictedPreferences?.[preferenceKeyForPoint(point) ?? '']);
       let alpha = 1;
       if (hasSearch && !searchMatchIds?.has(point.id)) alpha = Math.min(alpha, 0.22);
       if (selectedCluster !== null && point.cluster !== selectedCluster) alpha = Math.min(alpha, 0.18);
       if (selected?.id && !isSelected && !(colorByPreference && hasThumbPreference) && !(colorByPredictedPreference && (hasThumbPreference || hasPredictedPreference))) alpha = Math.min(alpha, 0.24);
-      if (colorByPreference && !hasThumbPreference) alpha = Math.min(alpha, 0.36);
-      if (colorByPredictedPreference && !hasThumbPreference && !hasPredictedPreference) alpha = Math.min(alpha, 0.32);
+      if (colorByPreference && !hasThumbPreference) alpha = isTruck ? (truckScore < 0.35 ? Math.min(alpha, 0.4) : alpha) : Math.min(alpha, 0.36);
+      if (colorByPredictedPreference && !hasThumbPreference && !hasPredictedPreference) alpha = isTruck ? (truckScore < 0.35 ? Math.min(alpha, 0.4) : alpha) : Math.min(alpha, 0.32);
       return {
         isSelected,
         isMarked: isMarked(point, marks),
@@ -243,14 +256,16 @@ export function Visualizer(props: VisualizerProps) {
         ? state.isSelected ? 360 : 230
         : point.kind === 'artist'
           ? state.isSelected ? 250 : 165
-          : state.isSelected ? 165 : 92;
+          : point.kind === 'truck'
+            ? state.isSelected ? 280 : 190
+            : state.isSelected ? 165 : 92;
       context.save();
       context.translate(sx * pixelRatio, sy * pixelRatio);
       context.scale(scale * pixelRatio, scale * pixelRatio);
       context.beginPath();
-      symbol.type(point.kind === 'user_track' ? d3.symbolStar : point.kind === 'artist' ? d3.symbolDiamond : d3.symbolCircle).size(size)();
+      symbol.type(point.kind === 'user_track' ? d3.symbolStar : point.kind === 'artist' ? d3.symbolDiamond : point.kind === 'truck' ? d3.symbolStar : d3.symbolCircle).size(size)();
       context.globalAlpha = state.alpha;
-      context.fillStyle = pointFill(point, clusterColor, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference);
+      context.fillStyle = pointFill(point, clusterColor, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, truckScores);
       context.fill();
       context.lineWidth = state.isSelected ? 4 : state.isLinked || state.isSearchMatch || state.isClusterMatch ? 3 : 1.2;
       context.strokeStyle = state.isSelected ? '#fff' : state.isSearchMatch || state.isClusterMatch ? '#ffd166' : state.isLinked || state.isMarked ? '#85f5c4' : 'rgba(255,255,255,0.85)';
@@ -323,7 +338,12 @@ export function Visualizer(props: VisualizerProps) {
     function showPointTooltip(point: Point) {
       if (!finePointer) return;
       const [sx, sy] = screenPoint(point);
-      setTooltip({data: {type: 'point', point, thumbValue: thumbPreferences?.[preferenceKeyForPoint(point) ?? ''] as PreferenceValue | undefined}, x: sx, y: sy});
+      setTooltip({data: {
+        type: 'point',
+        point,
+        thumbValue: thumbPreferences?.[preferenceKeyForPoint(point) ?? ''] as PreferenceValue | undefined,
+        truckScore: point.kind === 'truck' ? (truckScores?.[point.id] ?? 0) : undefined,
+      }, x: sx, y: sy});
     }
 
     function showEdgeTooltip(edge: SimilarityEdge) {
@@ -460,11 +480,12 @@ export function Visualizer(props: VisualizerProps) {
       tooltipRef.current?.removeEventListener('mouseleave', handleTooltipLeave);
       selection.on('.zoom', null);
     };
-  }, [points, loading, selected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onPlayArtistSong, onPlaySimilar, onRandomSong, sizeVersion]);
+  }, [points, loading, selected, marks, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, onThumb, edges, linkedPointIds, hasSearch, searchMatchIds, selectedCluster, showArtists, showSongs, focusRequest, onCanvasClick, onSelectArtist, onSelectTruck, onPlayArtistSong, onPlaySimilar, onRandomSong, sizeVersion]);
 
   const handlers: TooltipHandlers = {
     onThumb,
     onSelectArtist,
+    onSelectTruck,
     onPlayArtistSong,
     onPlaySimilar,
     onRandomSong,

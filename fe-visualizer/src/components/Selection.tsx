@@ -1,7 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {Truck} from 'lucide-react';
 import {modelSummary, playlistForPoint, visibleMetadataEntries} from '../selection';
 import type {PlaylistTrack} from '../selection';
-import type {Point} from '../types';
+import {parseTimeRange, truckNumber} from '../loveMobile';
+import type {ArtistSummary, Point} from '../types';
 
 type SelectionProps = {
   point: Point;
@@ -11,13 +13,66 @@ type SelectionProps = {
   canUndo: boolean;
   canRedo: boolean;
   onSelectArtist?: () => void;
+  onSelectTruck?: () => void;
   onPlaySimilar?: () => void;
   onRandomSong?: () => void;
+  truckLikeScore?: number;
+  truckArtists?: ArtistSummary[];
+  onSelectTruckArtist?: (name: string) => void;
 };
+
+function TruckDetail({metadata, likeScore, artists, onSelectArtist}: {
+  metadata: Record<string, unknown>;
+  likeScore: number | undefined;
+  artists: ArtistSummary[];
+  onSelectArtist?: (name: string) => void;
+}) {
+  const range = parseTimeRange(typeof metadata.time === 'string' ? metadata.time : '');
+  const facts: Array<[string, string | number | null]> = [];
+  if (range) facts.push(['Time', `${range.start} – ${range.end}`]);
+  if (metadata.genres) facts.push(['Genres', String(metadata.genres)]);
+  if (metadata.motto) facts.push(['Motto', String(metadata.motto)]);
+  if (metadata.source) facts.push(['Source', String(metadata.source)]);
+  return (
+    <div className="truck-view">
+      <div className="truck-score-row">
+        <span>Like score</span>
+        <b>{likeScore !== undefined && likeScore !== null ? likeScore.toFixed(2) : 'n/a'}</b>
+      </div>
+      {facts.length > 0 && (
+        <dl className="truck-facts">
+          {facts.map(([key, value]) => (
+            <React.Fragment key={key}>
+              <dt>{key}</dt>
+              <dd>{String(value)}</dd>
+            </React.Fragment>
+          ))}
+        </dl>
+      )}
+      <div className="playlist">
+        <div className="playlist-header">Acts on this truck · {artists.length}</div>
+        {artists.map((artist) => (
+          <button
+            type="button"
+            className="truck-artist-row"
+            key={artist.key}
+            onClick={() => onSelectArtist?.(artist.name)}
+          >
+            <span className="truck-artist-score">{artist.likeScore.toFixed(2)}</span>
+            <strong>{artist.name}</strong>
+            <span className="truck-artist-songs">{artist.trackCount} songs</span>
+          </button>
+        ))}
+        {!artists.length && <p className="muted">No acts from this truck are on the map.</p>}
+      </div>
+    </div>
+  );
+}
 
 export function Selection({
   point, playing, onUndo, onRedo, canUndo, canRedo,
-  onSelectArtist, onPlaySimilar, onRandomSong,
+  onSelectArtist, onSelectTruck, onPlaySimilar, onRandomSong,
+  truckLikeScore, truckArtists, onSelectTruckArtist,
 }: SelectionProps) {
   const metadata = point.metadata || {};
   const model = modelSummary(metadata);
@@ -29,9 +84,19 @@ export function Selection({
     setActiveIndex(0);
   }, [point.id]);
 
+  const isTruck = point.kind === 'truck';
+  const showArtistButton = !isTruck && point.kind !== 'artist' && Boolean(onSelectArtist);
+  const showTruckButton = point.kind === 'artist' && Boolean(onSelectTruck);
+
   return (
     <div>
-      <p className="eyebrow">{point.kind}</p>
+      <p className="eyebrow">
+        {isTruck ? (
+          <>
+            <Truck size={14} aria-hidden="true" /> Love Mobile #{truckNumber(metadata)}
+          </>
+        ) : point.kind}
+      </p>
       <h3>{point.label}</h3>
       <div className="selection-history">
         <button type="button" className="secondary" onClick={onUndo} disabled={!canUndo}>Undo selection</button>
@@ -39,13 +104,16 @@ export function Selection({
       </div>
       <p className="shortcut-hint">Shortcuts: Ctrl+Z undo, Ctrl+R redo.</p>
       <div className="selection-actions">
-        {point.kind !== 'artist' && onSelectArtist && <button type="button" className="secondary" onClick={onSelectArtist}>Artist</button>}
+        {showArtistButton && <button type="button" className="secondary" onClick={onSelectArtist}>Artist</button>}
+        {showTruckButton && <button type="button" className="secondary" onClick={onSelectTruck}>Truck</button>}
         {onPlaySimilar && <button type="button" className="secondary" onClick={onPlaySimilar}>Play similar</button>}
         {onRandomSong && <button type="button" className="secondary" onClick={onRandomSong}>Random song</button>}
       </div>
       {activeTrack?.soundcloudUrl && <SoundCloudPlayer key={activeTrack.soundcloudUrl} url={activeTrack.soundcloudUrl} playing={playing} />}
       {activeTrack?.localUrl && <LocalAudio key={activeTrack.localUrl} src={activeTrack.localUrl} playing={playing} />}
-      {point.kind === 'artist' && (
+      {isTruck ? (
+        <TruckDetail metadata={metadata} likeScore={truckLikeScore} artists={truckArtists || []} onSelectArtist={onSelectTruckArtist} />
+      ) : point.kind === 'artist' ? (
         <div className="playlist">
           <div className="playlist-header">Artist playlist · {playlist.length} songs</div>
           {playlist.map((track, index) => (
@@ -60,7 +128,7 @@ export function Selection({
             </button>
           ))}
         </div>
-      )}
+      ) : null}
       <dl>{visibleMetadataEntries(metadata).map(([key, value]) => <React.Fragment key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{String(value)}</dd></React.Fragment>)}</dl>
       {model && <p className="model-note">Embedding model: {model}</p>}
     </div>

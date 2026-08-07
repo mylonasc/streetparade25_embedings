@@ -1,4 +1,4 @@
-export type PointKind = 'track' | 'user_track' | 'artist';
+export type PointKind = 'track' | 'user_track' | 'artist' | 'truck';
 
 export type MetadataTracks = Array<{
   id?: number | string;
@@ -43,6 +43,9 @@ export type PointMetadata = {
   track_count?: number;
   tracks?: MetadataTracks;
   love_mobiles?: LoveMobile[];
+  artist_names?: string[];
+  like_score?: number;
+  best_song?: {title?: string; url?: string};
   embedding_model?: string;
   model_name?: string;
   embedding_backend?: string;
@@ -78,6 +81,7 @@ export type VisualizationPayload = {
   point_count?: number;
   base_point_count?: number;
   artist_point_count?: number;
+  truck_point_count?: number;
   user_point_count?: number;
   features?: VisualizationFeatures;
 };
@@ -86,6 +90,7 @@ export type Stats = {
   point_count: number;
   base_point_count: number;
   artist_point_count: number;
+  truck_point_count: number;
   user_point_count: number;
 };
 

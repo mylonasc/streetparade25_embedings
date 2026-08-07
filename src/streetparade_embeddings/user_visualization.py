@@ -468,7 +468,8 @@ def visualization_points(username: str | None = None) -> list[dict[str, Any]]:
         points = base_embedding_points()
     if username:
         points = merge_current_user_points(points, username)
-    return add_artist_points(points)
+    points = add_artist_points(points)
+    return add_truck_points(points)
 
 
 def base_embedding_points(request: LayoutRequest | None = None) -> list[dict[str, Any]]:
@@ -525,6 +526,97 @@ def add_artist_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return without_old_artists + artist_points
+
+
+def fetch_love_mobiles_with_artists() -> list[dict[str, Any]]:
+    """Load love mobiles with the artist names linked to each truck.
+
+    Returns:
+        One dictionary per love mobile with the base love-mobile columns plus
+        an ``artist_names`` list gathered from ``artist_love_mobiles``.
+    """
+    with connect() as conn:
+        has_table = conn.execute(
+            "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'love_mobiles'"
+        ).fetchone()["count"]
+        if not has_table:
+            return []
+        rows = conn.execute(
+            """
+            SELECT lm.*, alm.artist_name
+            FROM love_mobiles lm
+            LEFT JOIN artist_love_mobiles alm ON alm.love_mobile_id = lm.id
+            ORDER BY lm.source_index, lm.id
+            """
+        ).fetchall()
+    grouped: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        data = row_dict(row)
+        lm_id = int(data["id"])
+        entry = grouped.setdefault(lm_id, {})
+        if "artist_names" not in entry:
+            entry.update({key: value for key, value in data.items() if key != "artist_name"})
+            entry["artist_names"] = []
+        if data.get("artist_name"):
+            entry["artist_names"].append(str(data["artist_name"]))
+    for entry in grouped.values():
+        entry["artist_names"] = list(dict.fromkeys(entry["artist_names"]))
+    return list(grouped.values())
+
+
+def add_truck_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Add synthetic truck (love mobile) points at the mean of their artists.
+
+    Trucks have no embeddings of their own; each truck sits at the centroid of
+    the artist points that play on it. Trucks with no artists present on the
+    current map are skipped. Because positions are derived from artist points
+    every time the payload is built, a t-SNE/PCA recomputation automatically
+    repositions the trucks.
+    """
+    artist_by_name = {point.get("label"): point for point in points if point.get("kind") == "artist"}
+    truck_points: list[dict[str, Any]] = []
+    for truck in fetch_love_mobiles_with_artists():
+        artist_names = [name for name in truck.get("artist_names") or [] if name in artist_by_name]
+        artist_points = [artist_by_name[name] for name in artist_names]
+        if not artist_points:
+            continue
+        clusters = [int(point.get("cluster", 0)) for point in artist_points]
+        cluster = max(set(clusters), key=clusters.count) if clusters else 0
+        tracks: list[dict[str, Any]] = []
+        for point in artist_points:
+            artist_name = point.get("label")
+            for track in (point.get("metadata") or {}).get("tracks") or []:
+                tracks.append({**track, "artist_name": artist_name})
+        metadata = {
+            "id": truck.get("id"),
+            "uuid": truck.get("uuid"),
+            "source_index": truck.get("source_index"),
+            "number": truck.get("number"),
+            "name": truck.get("name"),
+            "title": truck.get("title"),
+            "genres": truck.get("genres"),
+            "motto": truck.get("motto"),
+            "time": truck.get("time"),
+            "description": truck.get("description"),
+            "image": json_value(truck.get("image"), {}),
+            "links": json_value(truck.get("links"), []),
+            "source": truck.get("source"),
+            "artist_names": artist_names,
+            "track_count": len(tracks),
+            "tracks": tracks,
+        }
+        truck_points.append(
+            {
+                "id": f"truck-{truck.get('uuid') or truck.get('source_index') or truck.get('id')}",
+                "kind": "truck",
+                "label": truck.get("name") or truck.get("title") or f"Truck {truck.get('number') or ''}".strip(),
+                "x": float(np.mean([point["x"] for point in artist_points])),
+                "y": float(np.mean([point["y"] for point in artist_points])),
+                "cluster": cluster,
+                "metadata": metadata,
+            }
+        )
+    return points + truck_points
 
 
 def merge_current_user_points(points: list[dict[str, Any]], username: str) -> list[dict[str, Any]]:

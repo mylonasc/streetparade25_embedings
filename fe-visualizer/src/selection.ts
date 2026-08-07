@@ -24,6 +24,15 @@ export function modelSummary(metadata: Record<string, unknown>): string | null {
 
 export function playlistForPoint(point: PointLike): PlaylistTrack[] {
   const metadata = point.metadata || {};
+  if (point.kind === 'truck') {
+    const bestSong = metadata.best_song;
+    if (bestSong?.url) {
+      return [playlistTrack(bestSong.title || point.label, bestSong.url, null)].filter((track): track is PlaylistTrack => Boolean(track));
+    }
+    return (metadata.tracks || [])
+      .map((track) => playlistTrack(track.title || track.label || `Track ${track.track_id || ''}`, track.url || null, null))
+      .filter((track): track is PlaylistTrack => Boolean(track));
+  }
   if (point.kind === 'artist') {
     return (metadata.tracks || [])
       .map((track) => playlistTrack(track.title || track.label || `Track ${track.track_id || ''}`, track.url || null, null))

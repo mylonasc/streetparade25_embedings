@@ -195,6 +195,7 @@ def get_visualization_response(username: str | None, song_downloads_enabled: Cal
         "point_count": len(points),
         "base_point_count": sum(1 for point in points if point.get("kind") == "track"),
         "artist_point_count": sum(1 for point in points if point.get("kind") == "artist"),
+        "truck_point_count": sum(1 for point in points if point.get("kind") == "truck"),
         "user_point_count": sum(1 for point in points if point.get("kind") == "user_track"),
         "has_cached_layout": latest_layout_points(username) is not None,
     }
@@ -223,7 +224,7 @@ def visualization_signature(username: str | None, user_song_downloads_enabled: b
     else:
         parts.extend(_path_fingerprint(default_chroma_dir()))
     with connect() as conn:
-        for table in ("artists", "tracks", "track_embeddings"):
+        for table in ("artists", "tracks", "track_embeddings", "love_mobiles", "artist_love_mobiles"):
             parts.extend(_table_fingerprint(conn, table))
         parts.extend(_table_fingerprint(conn, "embedding_layouts", time_column="finished_at"))
         if username:

@@ -13,10 +13,13 @@ export function pointSearchText<T extends SearchablePoint>(point: T): string {
     .filter(([, value]) => value !== null && value !== undefined && typeof value !== 'object')
     .map(([key, value]) => `${key} ${value}`)
     .join(' ');
+  const artistNames = Array.isArray(metadata.artist_names) ? (metadata.artist_names as unknown[]).join(' ') : '';
   const artistTracks = ((metadata.tracks as Array<{title?: string; label?: string; url?: string}> | undefined) || [])
     .map((track) => `${track.title || ''} ${track.label || ''} ${track.url || ''}`)
     .join(' ');
-  return `${point.kind} ${point.label} ${flat} ${artistTracks}`.toLowerCase();
+  const bestSong = (metadata.best_song as {title?: string; url?: string} | undefined);
+  const bestSongText = bestSong ? `${bestSong.title || ''} ${bestSong.url || ''}` : '';
+  return `${point.kind} ${point.label} ${flat} ${artistNames} ${artistTracks} ${bestSongText}`.toLowerCase();
 }
 
 export function buildSearchIndex<T extends SearchablePoint>(points: T[]): Map<string, string> {
