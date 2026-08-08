@@ -12,21 +12,23 @@ export function whatsAppShareUrl(link: string, text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(`${text} ${link}`)}`;
 }
 
-export function serializeLikedTrucks(trucks: {truck: {number?: number | string; source_index?: number; name?: string; title?: string; genres?: string; time?: string; links?: Array<Record<string, unknown>>; artist_links?: Array<Record<string, unknown>>}; artists: string[]; score?: number}[]): {
+export function serializeLikedTrucks(trucks: {truck: {number?: number | string; source_index?: number; name?: string; title?: string; genres?: string; time?: string; links?: Array<Record<string, unknown>>; artist_links?: Array<Record<string, unknown>>}; artists: string[]; artistSlots?: Array<{name?: string; set_order?: number | null; set_start?: string | null; set_end?: string | null}>; score?: number}[]): {
   number: string;
   name: string;
   genres: string;
   time: string;
   artists: string[];
+  artistSlots?: Array<{name?: string; set_order?: number | null; set_start?: string | null; set_end?: string | null}>;
   score: number;
   soundcloudUrl: string;
 }[] {
-  return trucks.map(({truck, artists, score = 0}) => ({
+  return trucks.map(({truck, artists, artistSlots = [], score = 0}) => ({
     number: truckNumber(truck),
     name: truck.name || truck.title || '',
     genres: truck.genres || '',
     time: truck.time || '',
     artists,
+    artistSlots: artistSlots.length ? artistSlots : undefined,
     score,
     soundcloudUrl: soundcloudUrlFromLinks(truck.links, truck.artist_links),
   }));

@@ -255,6 +255,28 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .share-score-filter { display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; font-weight: 800; }
 .share-score-filter b { color: var(--accent); }
 .share-score-filter input[type="range"] { width: 100%; accent-color: var(--accent); }
+.time-range-wrap { display: grid; gap: 6px; color: var(--muted); font-size: 0.88rem; font-weight: 800; }
+.time-range-labels { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.time-range-labels b { color: var(--accent); }
+.time-range-track-wrap { position: relative; height: 26px; }
+.time-range-track { position: absolute; left: 0; right: 0; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 999px; background: rgba(255, 255, 255, 0.16); }
+.time-range-track-fill { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 999px; background: var(--accent); }
+.time-range-input { position: absolute; inset: 0; width: 100%; height: 26px; margin: 0; -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none; }
+.time-range-input::-webkit-slider-runnable-track { height: 26px; background: transparent; }
+.time-range-input::-moz-range-track { height: 26px; background: transparent; }
+.time-range-input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: 4px; border-radius: 50%; border: 2px solid #06100c; background: var(--accent); pointer-events: auto; cursor: grab; }
+.time-range-input::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #06100c; background: var(--accent); pointer-events: auto; cursor: grab; }
+.time-range-input:focus-visible { outline: none; }
+.time-range-input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.time-range-input:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.time-range-from { z-index: 3; }
+.time-range-until { z-index: 2; }
+.truck-time-widget { position: relative; display: block; width: 100%; height: 16px; margin: 6px 0 2px; border-radius: 6px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.truck-time-track { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.16); }
+.truck-time-window { position: absolute; top: 0; bottom: 0; background: rgba(255, 255, 255, 0.4); }
+.truck-time-liked { position: absolute; top: 0; bottom: 0; background: var(--warm); box-shadow: 0 0 10px rgba(255, 85, 0, 0.6); }
+.liked-truck-slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.truck-act-slot { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 85, 0, 0.1); color: var(--text); font-size: 0.76rem; font-weight: 800; overflow-wrap: anywhere; }
 .liked-truck-box { cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
 .liked-truck-box:hover, .liked-truck-box:focus-visible { border-color: var(--warm); background: rgba(255, 85, 0, 0.08); outline: none; }
 .liked-truck-box[aria-pressed="true"] { border-color: var(--warm); background: rgba(255, 85, 0, 0.12); }

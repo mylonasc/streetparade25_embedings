@@ -139,4 +139,16 @@ describe('buildLikedTrucks truck score', () => {
     ]);
     expect(results).toHaveLength(0);
   });
+
+  it('collects each liked artist set slot on a shared truck', () => {
+    const setTruck = (number: number, name: string, set_start: string, set_end: string) => ({number, name, set_start, set_end});
+    const results = buildLikedTrucks([
+      artist({key: 'a', name: 'Alice', likeScore: 0.8, loveMobiles: [setTruck(9, 'Truck 9', '13:00', '14:15')]}),
+      artist({key: 'b', name: 'Bob', likeScore: 0.4, loveMobiles: [setTruck(9, 'Truck 9', '14:15', '15:30')]}),
+    ]);
+    expect(results[0].artistSlots).toEqual([
+      {name: 'Alice', set_order: null, set_start: '13:00', set_end: '14:15'},
+      {name: 'Bob', set_order: null, set_start: '14:15', set_end: '15:30'},
+    ]);
+  });
 });

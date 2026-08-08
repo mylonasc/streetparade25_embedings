@@ -75,12 +75,14 @@ export function buildLikedTrucks(artists: ArtistSummary[]): LikedTruck[] {
     for (const truck of artist.loveMobiles) {
       const key = truck.uuid ?? `${truck.number ?? truck.source_index ?? truck.name ?? truck.title}`;
       const existing = trucks.get(key);
+      const slot = {name: artist.name, set_order: truck.set_order ?? null, set_start: truck.set_start ?? null, set_end: truck.set_end ?? null};
       if (existing) {
         existing.artists.push(artist.name);
+        existing.artistSlots.push(slot);
         existing.scoreSum += artist.likeScore;
         existing.scoreCount += 1;
       } else {
-        trucks.set(key, {truck, artists: [artist.name], scoreSum: artist.likeScore, scoreCount: 1});
+        trucks.set(key, {truck, artists: [artist.name], artistSlots: [slot], scoreSum: artist.likeScore, scoreCount: 1});
       }
     }
   }

@@ -1,6 +1,9 @@
 import {MapPinned, Truck} from 'lucide-react';
-import {useEffect, useRef, useState, type KeyboardEvent} from 'react';
+import {useEffect, useMemo, useRef, useState, type KeyboardEvent} from 'react';
 import {parseTimeRange} from '../loveMobile';
+import {eventRangeFromTrucks, rangeInMinutes, truckOverlapsWindow} from '../truckTime';
+import type {ClockRange, MinuteRange} from '../truckTime';
+import {TimeRangeSlider, TruckTimeWidget, slotLabel} from './TruckTimeWidget';
 import type {SharedPayload, SharedTruck} from '../types';
 
 type TruckSort = 'score' | 'order';
@@ -13,10 +16,20 @@ type ActiveTrack = {
 export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload; onEnter: () => void}) {
   const trucks = Array.isArray(payload.likedTrucks) ? payload.likedTrucks : [];
   const artists = Array.isArray(payload.likedArtists) ? payload.likedArtists : [];
+  const eventRange = useMemo<ClockRange | null>(() => {
+    if (payload.eventStart && payload.eventEnd) return {start: payload.eventStart, end: payload.eventEnd};
+    return eventRangeFromTrucks(trucks);
+  }, [payload.eventStart, payload.eventEnd, trucks]);
+  const eventMinutes = eventRange ? rangeInMinutes(eventRange) : null;
   const [sort, setSort] = useState<TruckSort>('score');
   const [minScore, setMinScore] = useState(0);
+  const [timeWindow, setTimeWindow] = useState<MinuteRange | null>(eventMinutes);
+  useEffect(() => {
+    setTimeWindow(eventMinutes);
+  }, [eventMinutes]);
   const [activeTrack, setActiveTrack] = useState<ActiveTrack | null>(null);
-  const filteredTrucks = trucks.filter((truck) => truck.score >= minScore);
+  const timeFilteredTrucks = timeWindow ? trucks.filter((truck) => truckOverlapsWindow(truck.time, timeWindow)) : trucks;
+  const filteredTrucks = timeFilteredTrucks.filter((truck) => truck.score >= minScore);
   const sortedTrucks = [...filteredTrucks].sort(sort === 'score' ? byScore : byOrder);
   return (
     <main className="share-page">
@@ -38,6 +51,17 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
               <span>Minimum score <b>{formatScore(minScore)}</b></span>
               <input type="range" min="0" max="1" step="0.05" value={minScore} aria-label="Minimum truck score" onChange={(event) => setMinScore(Number(event.target.value))} />
             </label>
+            {eventMinutes && (
+              <div className="time-range-wrap">
+                <TimeRangeSlider
+                  min={eventMinutes.start}
+                  max={eventMinutes.end}
+                  from={timeWindow?.start ?? eventMinutes.start}
+                  until={timeWindow?.end ?? eventMinutes.end}
+                  onChange={(from, until) => setTimeWindow({start: from, end: until})}
+                />
+              </div>
+            )}
             {sortedTrucks.length ? (
               <ul className="liked-trucks-list">
                 {sortedTrucks.map((truck, index) => {
@@ -58,9 +82,17 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
                       <span className="liked-truck-detail">
                         <strong>{truck.name}</strong>
                         {range && <span className="liked-truck-time">{range.start}–{range.end}</span>}
+                        <TruckTimeWidget eventRange={eventRange} truckTime={truck.time} likedSlots={truck.artistSlots} />
                         {truck.genres && <span className="muted">{truck.genres}</span>}
                         <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
                         {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
+                        {Array.isArray(truck.artistSlots) && truck.artistSlots.length > 0 && (
+                          <span className="liked-truck-slots" aria-label="Liked acts with set times">
+                            {truck.artistSlots.map((slot, slotIndex) => (
+                              <span className="truck-act-slot" key={`${slot.name ?? slotIndex}-${slotIndex}`}>{slotLabel(slot)}</span>
+                            ))}
+                          </span>
+                        )}
                       </span>
                     </li>
                   );

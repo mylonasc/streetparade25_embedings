@@ -9,6 +9,13 @@ export type MetadataTracks = Array<{
   source_url?: string;
 }>;
 
+export type ArtistSlot = {
+  name?: string;
+  set_order?: number | null;
+  set_start?: string | null;
+  set_end?: string | null;
+};
+
 export type LoveMobile = {
   id?: number | string;
   uuid?: string;
@@ -26,12 +33,7 @@ export type LoveMobile = {
   source?: string;
   artist_name?: string;
   artist_bio?: string;
-  artist_slots?: Array<{
-    name?: string;
-    set_order?: number | null;
-    set_start?: string | null;
-    set_end?: string | null;
-  }>;
+  artist_slots?: ArtistSlot[];
   set_order?: number | null;
   set_start?: string | null;
   set_end?: string | null;
@@ -186,6 +188,7 @@ export type ArtistSummary = {
 export type LikedTruck = {
   truck: LoveMobile;
   artists: string[];
+  artistSlots: ArtistSlot[];
   score: number;
 };
 
@@ -195,6 +198,7 @@ export type SharedTruck = {
   genres: string;
   time: string;
   artists: string[];
+  artistSlots?: ArtistSlot[];
   score: number;
   soundcloudUrl?: string;
 };
@@ -210,4 +214,6 @@ export type SharedPayload = {
   marked: string[];
   likedTrucks: SharedTruck[];
   likedArtists: Array<string | SharedArtist>;
+  eventStart?: string;
+  eventEnd?: string;
 };

@@ -14,6 +14,7 @@ import {buildTruckSummaries, pickTruckArtist} from './truckSummary';
 import type {TruckSummaries} from './truckSummary';
 import {playlistForPoint, preferenceKeyForPoint, preferenceTarget} from './selection';
 import {serializeLikedTrucks, shareBlurb, soundcloudUrlFromTracks} from './share';
+import {eventRangeFromTrucks} from './truckTime';
 import {MARKS_KEY, USERNAME_KEY, readMarks, safeGetItem, safeSetItem} from './storage';
 import {useMobileViewport} from './responsive';
 import {BottomSheet} from './BottomSheet';
@@ -226,6 +227,7 @@ export function App() {
       marked: Array.from(marks),
       likedTrucks: serializeLikedTrucks(likedTrucks),
       likedArtists,
+      ...(eventRange ? {eventStart: eventRange.start, eventEnd: eventRange.end} : {}),
     };
     const share = await request<{token: string}>('/shares', {
       method: 'POST',
@@ -560,6 +562,10 @@ export function App() {
     })),
     [artistSummaries],
   );
+  const eventRange = useMemo(() => {
+    const truckPoints = points.filter((point) => point.kind === 'truck').map((point) => ({time: typeof point.metadata?.time === 'string' ? point.metadata.time : null}));
+    return eventRangeFromTrucks(truckPoints) || eventRangeFromTrucks(likedTrucks.map((entry) => ({time: entry.truck.time})));
+  }, [points, likedTrucks]);
 
   async function loadEmbeddedTracks(): Promise<EmbeddedTrack[]> {
     const tracks: EmbeddedTrack[] = [];
@@ -833,7 +839,7 @@ export function App() {
       {showSavedModelPrompt && <SavedModelPrompt onLoad={loadPreferenceColorModel} onClose={() => setShowSavedModelPrompt(false)} busy={preferenceTrainingBusy} />}
       {showTrainPrompt && <TrainModelPrompt count={preferenceRegistrationCount} onDismiss={() => setShowTrainPrompt(false)} onTrain={handleTrainPromptTrain} />}
       {activeLoveMobile && <LoveMobileModal loveMobile={activeLoveMobile} onClose={() => setActiveLoveMobile(null)} />}
-      {showLikedTrucks && <LikedTrucksModal trucks={likedTrucks} onCreateShare={createSharePage} onClose={() => setShowLikedTrucks(false)} />}
+      {showLikedTrucks && <LikedTrucksModal trucks={likedTrucks} eventRange={eventRange} onCreateShare={createSharePage} onClose={() => setShowLikedTrucks(false)} />}
     </main>
   );
 }

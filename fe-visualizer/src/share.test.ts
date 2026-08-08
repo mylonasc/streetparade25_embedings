@@ -33,6 +33,14 @@ describe('serializeLikedTrucks', () => {
       {number: '9', name: 'Magic Mountain', genres: '', time: '', artists: ['Cosmic Circle'], score: 0.5, soundcloudUrl: 'https://soundcloud.com/magic-mountain'},
     ]);
   });
+
+  it('passes artist set slots through to the snapshot', () => {
+    expect(serializeLikedTrucks([
+      {truck: {number: 9, name: 'Magic Mountain'}, artists: ['Cosmic Circle'], artistSlots: [{name: 'Cosmic Circle', set_start: '15:04', set_end: '15:38'}], score: 0.83},
+    ])).toEqual([
+      {number: '9', name: 'Magic Mountain', genres: '', time: '', artists: ['Cosmic Circle'], artistSlots: [{name: 'Cosmic Circle', set_start: '15:04', set_end: '15:38'}], score: 0.83, soundcloudUrl: ''},
+    ]);
+  });
 });
 
 describe('soundcloudUrlFromLinks', () => {
