@@ -563,9 +563,11 @@ export function App() {
     [artistSummaries],
   );
   const eventRange = useMemo(() => {
+    const preferred = eventRangeFromTrucks(likedTrucks.map((entry) => ({time: entry.truck.time})));
+    if (preferred) return preferred;
     const truckPoints = points.filter((point) => point.kind === 'truck').map((point) => ({time: typeof point.metadata?.time === 'string' ? point.metadata.time : null}));
-    return eventRangeFromTrucks(truckPoints) || eventRangeFromTrucks(likedTrucks.map((entry) => ({time: entry.truck.time})));
-  }, [points, likedTrucks]);
+    return eventRangeFromTrucks(truckPoints);
+  }, [likedTrucks, points]);
 
   async function loadEmbeddedTracks(): Promise<EmbeddedTrack[]> {
     const tracks: EmbeddedTrack[] = [];

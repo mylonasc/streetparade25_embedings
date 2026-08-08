@@ -1,8 +1,8 @@
 import React from 'react';
 import {Truck} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {loveMobileTitle, parseTimeRange, truckNumber} from '../loveMobile';
-import {minutesToTime, rangeInMinutes, truckOverlapsWindow} from '../truckTime';
+import {eventRangeFromTrucks, rangeInMinutes, truckOverlapsWindow} from '../truckTime';
 import type {ClockRange, MinuteRange} from '../truckTime';
 import {ShareMenu} from './ShareMenu';
 import {TimeRangeSlider, TruckTimeWidget, slotLabel} from './TruckTimeWidget';
@@ -252,12 +252,18 @@ export function TrainModelPrompt({count, onDismiss, onTrain}: {count: number; on
 }
 
 export function LikedTrucksModal({trucks, eventRange, onClose, onCreateShare}: {trucks: LikedTruck[]; eventRange: ClockRange | null; onClose: () => void; onCreateShare: () => Promise<{link: string; text: string}>}) {
-  const eventMinutes = eventRange ? rangeInMinutes(eventRange) : null;
-  const [timeWindow, setTimeWindow] = useState<MinuteRange | null>(eventMinutes);
+  const timelineRange = useMemo<ClockRange | null>(
+    () => eventRangeFromTrucks(trucks.map((entry) => ({time: entry.truck.time}))) || eventRange,
+    [trucks, eventRange],
+  );
+  const timelineMinutes = useMemo(() => (timelineRange ? rangeInMinutes(timelineRange) : null), [timelineRange]);
+  const [timeWindow, setTimeWindow] = useState<MinuteRange | null>(timelineMinutes);
   useEffect(() => {
-    setTimeWindow(eventMinutes);
-  }, [eventMinutes]);
-  const visibleTrucks = timeWindow ? trucks.filter((entry) => truckOverlapsWindow(entry.truck.time, timeWindow)) : trucks;
+    setTimeWindow(timelineMinutes);
+  }, [timelineMinutes]);
+  const [minScore, setMinScore] = useState(0);
+  const scoreFiltered = minScore > 0 ? trucks.filter((entry) => entry.score >= minScore) : trucks;
+  const visibleTrucks = timeWindow ? scoreFiltered.filter((entry) => truckOverlapsWindow(entry.truck.time, timeWindow)) : scoreFiltered;
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="layout-modal liked-trucks-modal" role="dialog" aria-modal="true" aria-labelledby="liked-trucks-title">
@@ -274,13 +280,17 @@ export function LikedTrucksModal({trucks, eventRange, onClose, onCreateShare}: {
         </div>
         {trucks.length ? (
           <>
-            {eventMinutes && (
+            <label className="share-score-filter">
+              <span>Minimum score <b>{formatScore(minScore)}</b></span>
+              <input type="range" min="0" max="1" step="0.05" value={minScore} aria-label="Minimum truck score" onChange={(event) => setMinScore(Number(event.target.value))} />
+            </label>
+            {timelineMinutes && (
               <div className="time-range-wrap">
                 <TimeRangeSlider
-                  min={eventMinutes.start}
-                  max={eventMinutes.end}
-                  from={timeWindow?.start ?? eventMinutes.start}
-                  until={timeWindow?.end ?? eventMinutes.end}
+                  min={timelineMinutes.start}
+                  max={timelineMinutes.end}
+                  from={timeWindow?.start ?? timelineMinutes.start}
+                  until={timeWindow?.end ?? timelineMinutes.end}
                   onChange={(from, until) => setTimeWindow({start: from, end: until})}
                 />
               </div>
@@ -295,7 +305,7 @@ export function LikedTrucksModal({trucks, eventRange, onClose, onCreateShare}: {
                       {parseTimeRange(entry.truck.time) && (
                         <span className="liked-truck-time">{parseTimeRange(entry.truck.time)!.start}–{parseTimeRange(entry.truck.time)!.end}</span>
                       )}
-                      <TruckTimeWidget eventRange={eventRange} truckTime={entry.truck.time} likedSlots={entry.artistSlots} />
+                      <TruckTimeWidget timelineRange={timelineRange} truckTime={entry.truck.time} likedSlots={entry.artistSlots} />
                       {entry.truck.genres && <span className="muted">{entry.truck.genres}</span>}
                       <span className="liked-truck-score">Score {formatScore(entry.score)}</span>
                       {entry.artistSlots.length > 0 && (
@@ -310,7 +320,7 @@ export function LikedTrucksModal({trucks, eventRange, onClose, onCreateShare}: {
                 ))}
               </ul>
             ) : (
-              <p className="muted">No trucks playing within {formatTimeWindow(timeWindow)}.</p>
+              <p className="muted">No trucks match the current filters.</p>
             )}
           </>
         ) : (
@@ -319,11 +329,6 @@ export function LikedTrucksModal({trucks, eventRange, onClose, onCreateShare}: {
       </section>
     </div>
   );
-}
-
-function formatTimeWindow(window: MinuteRange | null): string {
-  if (!window) return 'the selected window';
-  return `${minutesToTime(window.start)}–${minutesToTime(window.end)}`;
 }
 
 function formatScore(score: number | null | undefined): string {

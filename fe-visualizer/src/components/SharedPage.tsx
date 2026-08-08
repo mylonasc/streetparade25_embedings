@@ -16,17 +16,19 @@ type ActiveTrack = {
 export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload; onEnter: () => void}) {
   const trucks = Array.isArray(payload.likedTrucks) ? payload.likedTrucks : [];
   const artists = Array.isArray(payload.likedArtists) ? payload.likedArtists : [];
-  const eventRange = useMemo<ClockRange | null>(() => {
+  const timelineRange = useMemo<ClockRange | null>(() => {
+    const fromTrucks = eventRangeFromTrucks(trucks);
+    if (fromTrucks) return fromTrucks;
     if (payload.eventStart && payload.eventEnd) return {start: payload.eventStart, end: payload.eventEnd};
-    return eventRangeFromTrucks(trucks);
-  }, [payload.eventStart, payload.eventEnd, trucks]);
-  const eventMinutes = eventRange ? rangeInMinutes(eventRange) : null;
+    return null;
+  }, [trucks, payload.eventStart, payload.eventEnd]);
+  const timelineMinutes = useMemo(() => (timelineRange ? rangeInMinutes(timelineRange) : null), [timelineRange]);
   const [sort, setSort] = useState<TruckSort>('score');
   const [minScore, setMinScore] = useState(0);
-  const [timeWindow, setTimeWindow] = useState<MinuteRange | null>(eventMinutes);
+  const [timeWindow, setTimeWindow] = useState<MinuteRange | null>(timelineMinutes);
   useEffect(() => {
-    setTimeWindow(eventMinutes);
-  }, [eventMinutes]);
+    setTimeWindow(timelineMinutes);
+  }, [timelineMinutes]);
   const [activeTrack, setActiveTrack] = useState<ActiveTrack | null>(null);
   const timeFilteredTrucks = timeWindow ? trucks.filter((truck) => truckOverlapsWindow(truck.time, timeWindow)) : trucks;
   const filteredTrucks = timeFilteredTrucks.filter((truck) => truck.score >= minScore);
@@ -37,6 +39,8 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
         <p className="eyebrow"><Truck size={16} aria-hidden="true" /> Shared favorites</p>
         <h1>{payload.username || 'Someone'}&rsquo;s favorites</h1>
         <p className="muted">Street Parade 2026 acts this user liked or is likely to like, and the love mobiles where you can catch them.</p>
+
+        {trucks.length > 0 && <TruckTimelineSummary trucks={trucks} timelineRange={timelineRange} />}
 
         {activeTrack && <SoundCloudPlayer url={activeTrack.url} label={activeTrack.label} onClose={() => setActiveTrack(null)} />}
 
@@ -51,13 +55,13 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
               <span>Minimum score <b>{formatScore(minScore)}</b></span>
               <input type="range" min="0" max="1" step="0.05" value={minScore} aria-label="Minimum truck score" onChange={(event) => setMinScore(Number(event.target.value))} />
             </label>
-            {eventMinutes && (
+            {timelineMinutes && (
               <div className="time-range-wrap">
                 <TimeRangeSlider
-                  min={eventMinutes.start}
-                  max={eventMinutes.end}
-                  from={timeWindow?.start ?? eventMinutes.start}
-                  until={timeWindow?.end ?? eventMinutes.end}
+                  min={timelineMinutes.start}
+                  max={timelineMinutes.end}
+                  from={timeWindow?.start ?? timelineMinutes.start}
+                  until={timeWindow?.end ?? timelineMinutes.end}
                   onChange={(from, until) => setTimeWindow({start: from, end: until})}
                 />
               </div>
@@ -82,7 +86,7 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
                       <span className="liked-truck-detail">
                         <strong>{truck.name}</strong>
                         {range && <span className="liked-truck-time">{range.start}–{range.end}</span>}
-                        <TruckTimeWidget eventRange={eventRange} truckTime={truck.time} likedSlots={truck.artistSlots} />
+                        <TruckTimeWidget timelineRange={timelineRange} truckTime={truck.time} likedSlots={truck.artistSlots} />
                         {truck.genres && <span className="muted">{truck.genres}</span>}
                         <span className="liked-truck-score">Score {formatScore(truck.score)}</span>
                         {truck.artists.length > 0 && <span className="muted">Acts: {truck.artists.join(', ')}</span>}
@@ -137,6 +141,27 @@ export function SharedFavoritesPage({payload, onEnter}: {payload: SharedPayload;
         <button type="button" onClick={onEnter}><MapPinned size={18} aria-hidden="true" /> Explore the map</button>
       </section>
     </main>
+  );
+}
+
+function TruckTimelineSummary({trucks, timelineRange}: {trucks: SharedTruck[]; timelineRange: ClockRange | null}) {
+  const ordered = [...trucks].sort(byOrder);
+  return (
+    <section className="truck-timeline-summary" aria-label="Preferred trucks by time">
+      <h3>All trucks on the day</h3>
+      <div className="truck-timeline-strip">
+        {ordered.map((truck) => (
+          <div className="truck-timeline-box" key={`${truck.number}`} aria-label={`Truck ${truck.number} ${truck.name}`} title={`#${truck.number} ${truck.name}`}>
+            <TruckTimeWidget timelineRange={timelineRange} truckTime={truck.time} likedSlots={truck.artistSlots} compact />
+            <span className="truck-timeline-number">#{truck.number}</span>
+          </div>
+        ))}
+      </div>
+      <div className="truck-timeline-scale">
+        <span>{timelineRange?.start}</span>
+        <span>{timelineRange?.end}</span>
+      </div>
+    </section>
   );
 }
 

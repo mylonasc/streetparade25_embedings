@@ -39,6 +39,8 @@ const OVERLAP_GROUPS = [
   '.modal-header-actions',
   '.liked-trucks-list',
   '.liked-truck-slots',
+  '.truck-timeline-summary',
+  '.truck-timeline-strip',
   '.share-sort',
   '.share-score-filter',
   '.time-range-wrap',
