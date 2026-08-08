@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Truck} from 'lucide-react';
 import {modelSummary, playlistForPoint, visibleMetadataEntries} from '../selection';
 import type {PlaylistTrack} from '../selection';
-import {parseTimeRange, truckNumber} from '../loveMobile';
+import {artistSetRange, parseTimeRange, truckNumber} from '../loveMobile';
 import type {ArtistSummary, Point} from '../types';
 
 type SelectionProps = {
@@ -28,11 +28,17 @@ function TruckDetail({metadata, likeScore, artists, onSelectArtist}: {
   onSelectArtist?: (name: string) => void;
 }) {
   const range = parseTimeRange(typeof metadata.time === 'string' ? metadata.time : '');
+  const truckUuid = typeof metadata.uuid === 'string' ? metadata.uuid : null;
   const facts: Array<[string, string | number | null]> = [];
   if (range) facts.push(['Time', `${range.start} – ${range.end}`]);
   if (metadata.genres) facts.push(['Genres', String(metadata.genres)]);
   if (metadata.motto) facts.push(['Motto', String(metadata.motto)]);
   if (metadata.source) facts.push(['Source', String(metadata.source)]);
+  const artistSetTime = (artist: ArtistSummary): string | null => {
+    const loveMobile = artist.loveMobiles.find((entry) => entry.uuid && entry.uuid === truckUuid);
+    const range = artistSetRange(loveMobile || {});
+    return range ? `${range.start}–${range.end}` : null;
+  };
   return (
     <div className="truck-view">
       <div className="truck-score-row">
@@ -61,10 +67,30 @@ function TruckDetail({metadata, likeScore, artists, onSelectArtist}: {
             <span className="truck-artist-score">{artist.likeScore.toFixed(2)}</span>
             <strong>{artist.name}</strong>
             <span className="truck-artist-songs">{artist.trackCount} songs</span>
+            {artistSetTime(artist) && <span className="time-shield">{artistSetTime(artist)}</span>}
           </button>
         ))}
         {!artists.length && <p className="muted">No acts from this truck are on the map.</p>}
       </div>
+    </div>
+  );
+}
+
+function ArtistSetShields({metadata}: {metadata: Record<string, unknown>}) {
+  const loveMobiles = Array.isArray(metadata.love_mobiles) ? metadata.love_mobiles : [];
+  const shields: Array<{key: string; label: string}> = [];
+  for (const loveMobile of loveMobiles) {
+    const range = artistSetRange(loveMobile as {set_start?: string; set_end?: string});
+    if (!range) continue;
+    const number = truckNumber(loveMobile as {number?: number | string; source_index?: number});
+    shields.push({key: loveMobile.uuid ?? `${number}-${loveMobile.name ?? ''}`, label: `#${number} · ${range.start}–${range.end}`});
+  }
+  if (!shields.length) return null;
+  return (
+    <div className="artist-set-shields" aria-label="Set times">
+      {shields.map((shield) => (
+        <span className="time-shield" key={shield.key}>{shield.label}</span>
+      ))}
     </div>
   );
 }
@@ -114,20 +140,23 @@ export function Selection({
       {isTruck ? (
         <TruckDetail metadata={metadata} likeScore={truckLikeScore} artists={truckArtists || []} onSelectArtist={onSelectTruckArtist} />
       ) : point.kind === 'artist' ? (
-        <div className="playlist">
-          <div className="playlist-header">Artist playlist · {playlist.length} songs</div>
-          {playlist.map((track, index) => (
-            <button
-              type="button"
-              className={`playlist-track ${index === activeIndex ? 'active' : ''}`}
-              key={`${track.title}-${track.soundcloudUrl || track.localUrl || index}`}
-              onClick={() => setActiveIndex(index)}
-            >
-              <span>{index + 1}</span>
-              <strong>{track.title}</strong>
-            </button>
-          ))}
-        </div>
+        <>
+          <ArtistSetShields metadata={metadata} />
+          <div className="playlist">
+            <div className="playlist-header">Artist playlist · {playlist.length} songs</div>
+            {playlist.map((track, index) => (
+              <button
+                type="button"
+                className={`playlist-track ${index === activeIndex ? 'active' : ''}`}
+                key={`${track.title}-${track.soundcloudUrl || track.localUrl || index}`}
+                onClick={() => setActiveIndex(index)}
+              >
+                <span>{index + 1}</span>
+                <strong>{track.title}</strong>
+              </button>
+            ))}
+          </div>
+        </>
       ) : null}
       <dl>{visibleMetadataEntries(metadata).map(([key, value]) => <React.Fragment key={key}><dt>{key.replaceAll('_', ' ')}</dt><dd>{String(value)}</dd></React.Fragment>)}</dl>
       {model && <p className="model-note">Embedding model: {model}</p>}

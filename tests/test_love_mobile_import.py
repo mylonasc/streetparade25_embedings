@@ -95,3 +95,33 @@ def test_import_love_mobiles_creates_artists_and_links_idempotently(monkeypatch,
             (existing["id"],),
         ).fetchall()
         assert [row["number"] for row in mobile_rows] == [1, 2]
+
+        slots = conn.execute(
+            """
+            SELECT alm.artist_name, alm.set_order, alm.set_start, alm.set_end
+            FROM artist_love_mobiles alm
+            JOIN love_mobiles lm ON lm.id = alm.love_mobile_id
+            WHERE lm.number = 1
+            ORDER BY alm.set_order
+            """
+        ).fetchall()
+        assert [(row["artist_name"], row["set_order"]) for row in slots] == [
+            ("Existing Artist", 0),
+            ("New Artist", 1),
+        ]
+        assert slots[0]["set_start"] == "13:00"
+        assert slots[0]["set_end"] == "15:30"
+        assert slots[1]["set_start"] == "15:30"
+        assert slots[1]["set_end"] == "18:00"
+
+        mobile_two_slots = conn.execute(
+            """
+            SELECT alm.set_order, alm.set_start, alm.set_end
+            FROM artist_love_mobiles alm
+            JOIN love_mobiles lm ON lm.id = alm.love_mobile_id
+            WHERE lm.number = 2
+            """
+        ).fetchall()
+        assert mobile_two_slots[0]["set_order"] == 0
+        assert mobile_two_slots[0]["set_start"] is None
+        assert mobile_two_slots[0]["set_end"] is None

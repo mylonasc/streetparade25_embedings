@@ -3,7 +3,10 @@ from __future__ import annotations
 import os
 import sqlite3
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
+
+from .set_times import equal_set_times
 
 
 def db_path() -> Path:
@@ -276,6 +279,9 @@ def ensure_love_mobile_tables(conn: sqlite3.Connection) -> None:
             artist_name TEXT NOT NULL,
             artist_bio TEXT,
             artist_links TEXT NOT NULL DEFAULT '[]',
+            set_order INTEGER,
+            set_start TEXT,
+            set_end TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             UNIQUE(artist_id, love_mobile_id)
@@ -293,6 +299,58 @@ def ensure_love_mobile_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE love_mobiles ADD COLUMN source_index INTEGER")
         conn.execute("UPDATE love_mobiles SET source_index = number WHERE source_index IS NULL")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS love_mobiles_source_index_unique ON love_mobiles(source_index)")
+
+    link_columns = {row["name"] for row in conn.execute("PRAGMA table_info(artist_love_mobiles)")}
+    for column, definition in (("set_order", "INTEGER"), ("set_start", "TEXT"), ("set_end", "TEXT")):
+        if column not in link_columns:
+            conn.execute(f"ALTER TABLE artist_love_mobiles ADD COLUMN {column} {definition}")
+    backfill_artist_set_times(conn)
+
+
+def backfill_artist_set_times(conn: sqlite3.Connection) -> None:
+    """Populate per-artist set slots for rows missing a set order.
+
+    The play order is the insertion order of ``artist_love_mobiles`` rows within
+    each truck. Slots are computed from the truck's ``time`` window with an equal
+    spread across its artists (see :func:`set_times.equal_set_times`).
+
+    Args:
+        conn: Open application database connection.
+    """
+    has_table = conn.execute(
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'artist_love_mobiles'"
+    ).fetchone()["count"]
+    if not has_table:
+        return
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(artist_love_mobiles)")}
+    if "set_order" not in columns:
+        return
+    pending = conn.execute(
+        """
+        SELECT alm.id, alm.love_mobile_id, lm.time
+        FROM artist_love_mobiles alm
+        JOIN love_mobiles lm ON lm.id = alm.love_mobile_id
+        WHERE alm.set_order IS NULL
+        ORDER BY alm.love_mobile_id, alm.id
+        """
+    ).fetchall()
+    if not pending:
+        return
+    grouped: dict[int, list[sqlite3.Row]] = {}
+    for row in pending:
+        grouped.setdefault(row["love_mobile_id"], []).append(row)
+    for rows in grouped.values():
+        slots = equal_set_times(rows[0]["time"], len(rows))
+        for index, row in enumerate(rows):
+            slot = slots[index] if index < len(slots) else None
+            conn.execute(
+                """
+                UPDATE artist_love_mobiles
+                SET set_order = ?, set_start = ?, set_end = ?
+                WHERE id = ?
+                """,
+                (index, slot[0] if slot else None, slot[1] if slot else None, row["id"]),
+            )
 
 
 def rebuild_love_mobile_table_if_needed(conn: sqlite3.Connection) -> None:

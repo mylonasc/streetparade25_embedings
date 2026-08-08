@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {loveMobileTitle, parseTimeRange, truckLabel, truckNumber} from './loveMobile';
+import {artistSetLabel, artistSetRange, loveMobileTitle, parseTimeRange, truckLabel, truckNumber} from './loveMobile';
 import type {LoveMobile} from './types';
 
 describe('parseTimeRange', () => {
@@ -51,5 +51,31 @@ describe('loveMobileTitle', () => {
     expect(loveMobileTitle({name: 'Drumcode x Friends', number: 1} as LoveMobile)).toBe('Drumcode x Friends');
     expect(loveMobileTitle({title: '1. Drumcode', number: 1} as LoveMobile)).toBe('1. Drumcode');
     expect(loveMobileTitle({number: 1} as LoveMobile)).toBe('Love Mobile 1');
+  });
+});
+
+describe('artistSetRange', () => {
+  it('reads the artist set slot from set_start/set_end', () => {
+    expect(artistSetRange({set_start: '13:00', set_end: '14:15'} as LoveMobile)).toEqual({start: '13:00', end: '14:15'});
+  });
+
+  it('normalizes dot separators', () => {
+    expect(artistSetRange({set_start: '13.00', set_end: '15.30'} as LoveMobile)).toEqual({start: '13:00', end: '15:30'});
+  });
+
+  it('returns null when the slot is missing', () => {
+    expect(artistSetRange({} as LoveMobile)).toBeNull();
+    expect(artistSetRange({set_start: '13:00'} as LoveMobile)).toBeNull();
+    expect(artistSetRange({time: '13:00 - 18:00'} as LoveMobile)).toBeNull();
+  });
+});
+
+describe('artistSetLabel', () => {
+  it('formats the slot with an en dash', () => {
+    expect(artistSetLabel({set_start: '13:00', set_end: '14:15'} as LoveMobile)).toBe('13:00–14:15');
+  });
+
+  it('returns null without a slot', () => {
+    expect(artistSetLabel({time: '13:00 - 18:00'} as LoveMobile)).toBeNull();
   });
 });

@@ -26,6 +26,15 @@ export type LoveMobile = {
   source?: string;
   artist_name?: string;
   artist_bio?: string;
+  artist_slots?: Array<{
+    name?: string;
+    set_order?: number | null;
+    set_start?: string | null;
+    set_end?: string | null;
+  }>;
+  set_order?: number | null;
+  set_start?: string | null;
+  set_end?: string | null;
 };
 
 export type PointMetadata = {

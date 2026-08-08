@@ -11,6 +11,7 @@ import yaml
 from streetparade_embeddings.db import connect, init_db
 from streetparade_embeddings.repositories import create_or_update_artist, upsert_artist_love_mobile, upsert_love_mobile
 from streetparade_embeddings.schemas import ArtistCreate
+from streetparade_embeddings.set_times import equal_set_times
 
 
 DEFAULT_LOVE_MOBILES_FILE = Path("assets/love-mobiles-26.yaml")
@@ -91,9 +92,10 @@ def import_love_mobiles(path: Path = DEFAULT_LOVE_MOBILES_FILE) -> dict[str, int
         love_mobile = upsert_love_mobile(love_mobile_payload(raw_mobile, data.get("source")), now)
         stats["love_mobiles"] += 1
 
-        for raw_artist in raw_mobile.get("artists") or []:
-            if not isinstance(raw_artist, dict) or not raw_artist.get("name"):
-                continue
+        raw_artists = [artist for artist in raw_mobile.get("artists") or [] if isinstance(artist, dict) and artist.get("name")]
+        slots = equal_set_times(raw_mobile.get("time"), len(raw_artists))
+        for index, raw_artist in enumerate(raw_artists):
+            slot = slots[index] if index < len(slots) else None
             artist = create_or_update_artist(artist_payload(raw_artist), now)
             stats["artists_created_or_updated"] += 1
             upsert_artist_love_mobile(
@@ -103,6 +105,9 @@ def import_love_mobiles(path: Path = DEFAULT_LOVE_MOBILES_FILE) -> dict[str, int
                 raw_artist.get("bio") or None,
                 [link for link in raw_artist.get("links") or [] if isinstance(link, dict)],
                 now,
+                set_order=index,
+                set_start=slot[0] if slot else None,
+                set_end=slot[1] if slot else None,
             )
             stats["artist_love_mobile_links"] += 1
 

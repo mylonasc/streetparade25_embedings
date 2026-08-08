@@ -2,7 +2,7 @@ import {Heart, Star, ThumbsDown, ThumbsUp, Truck} from 'lucide-react';
 import React, {useEffect, useRef, useState} from 'react';
 import type {Evaluation, LossPoint, TrainingOptions} from '../preferenceTraining';
 import {summarizeExamples} from '../preferenceTraining';
-import {parseTimeRange, truckLabel, truckNumber} from '../loveMobile';
+import {parseTimeRange, artistSetRange, truckLabel, truckNumber} from '../loveMobile';
 import type {ArtistSummary, LoveMobile, PointLike, PreferenceValue, UserTrack} from '../types';
 
 type PreferenceTrainingPanelProps = {
@@ -159,12 +159,15 @@ export function ArtistFavoritesPanel({artists, onPreference, onSelect, modelAvai
             {artist.loveMobiles.length > 0 && (
               <div className="artist-love-mobiles" aria-label="Love mobiles">
                 {artist.loveMobiles.map((loveMobile) => {
-                  const range = parseTimeRange(loveMobile.time);
+                  const setRange = artistSetRange(loveMobile);
+                  const range = setRange || parseTimeRange(loveMobile.time);
                   return (
                     <button type="button" className="love-mobile-chip" key={loveMobile.uuid ?? `${loveMobile.number ?? 'lm'}-${loveMobile.name ?? ''}`} onClick={() => onShowLoveMobile(loveMobile)} title={loveMobile.name || loveMobile.title} aria-label={`Love mobile ${truckLabel(loveMobile)} info`}>
                       <Truck size={16} aria-hidden="true" />
                       <span className="love-mobile-chip-number">#{truckNumber(loveMobile)}</span>
-                      {range && <span className="love-mobile-chip-time">{range.start}–{range.end}</span>}
+                      {setRange
+                        ? <span className="time-shield" aria-label="Set time">{setRange.start}–{setRange.end}</span>
+                        : range && <span className="love-mobile-chip-time">{range.start}–{range.end}</span>}
                     </button>
                   );
                 })}

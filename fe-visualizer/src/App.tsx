@@ -29,7 +29,7 @@ import type {
 } from './types';
 
 const SONG_DOWNLOADS_BUILD_ENABLED = import.meta.env.VITE_ENABLE_SONG_DL_AND_EMBEDINGS !== 'false';
-const VISUALIZATION_CACHE_VERSION = 1;
+const VISUALIZATION_CACHE_VERSION = 2;
 const EMPTY_STATS: Stats = {point_count: 0, base_point_count: 0, artist_point_count: 0, truck_point_count: 0, user_point_count: 0};
 
 type VisualizationCache = {version: number; signature: string; cachedAt: number; payload: VisualizationPayload};

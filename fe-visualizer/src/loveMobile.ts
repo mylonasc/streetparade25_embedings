@@ -18,6 +18,19 @@ export function parseTimeRange(time: string | null | undefined): TimeRange | nul
   return {start: normalizeTime(match[1]), end: normalizeTime(match[2])};
 }
 
+export function artistSetRange(loveMobile: LoveMobile): TimeRange | null {
+  const start = loveMobile.set_start;
+  const end = loveMobile.set_end;
+  if (!start || !end) return null;
+  return {start: normalizeTime(start), end: normalizeTime(end)};
+}
+
+export function artistSetLabel(loveMobile: LoveMobile): string | null {
+  const range = artistSetRange(loveMobile);
+  if (!range) return null;
+  return `${range.start}–${range.end}`;
+}
+
 export function truckNumber(loveMobile: LoveMobile): string {
   const number = loveMobile.number ?? loveMobile.source_index;
   return number !== undefined && number !== null ? String(number) : '';

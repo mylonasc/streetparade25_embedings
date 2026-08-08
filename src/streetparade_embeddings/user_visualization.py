@@ -541,24 +541,33 @@ def fetch_love_mobiles_with_artists() -> list[dict[str, Any]]:
         ).fetchone()["count"]
         if not has_table:
             return []
-        rows = conn.execute(
-            """
-            SELECT lm.*, alm.artist_name
-            FROM love_mobiles lm
-            LEFT JOIN artist_love_mobiles alm ON alm.love_mobile_id = lm.id
-            ORDER BY lm.source_index, lm.id
-            """
-        ).fetchall()
+    rows = conn.execute(
+        """
+        SELECT lm.*, alm.artist_name, alm.set_order, alm.set_start, alm.set_end
+        FROM love_mobiles lm
+        LEFT JOIN artist_love_mobiles alm ON alm.love_mobile_id = lm.id
+        ORDER BY lm.source_index, alm.id
+        """
+    ).fetchall()
     grouped: dict[int, dict[str, Any]] = {}
     for row in rows:
         data = row_dict(row)
         lm_id = int(data["id"])
         entry = grouped.setdefault(lm_id, {})
         if "artist_names" not in entry:
-            entry.update({key: value for key, value in data.items() if key != "artist_name"})
+            entry.update({key: value for key, value in data.items() if key not in ("artist_name", "set_order", "set_start", "set_end")})
             entry["artist_names"] = []
+            entry["artist_slots"] = []
         if data.get("artist_name"):
             entry["artist_names"].append(str(data["artist_name"]))
+            entry["artist_slots"].append(
+                {
+                    "name": str(data["artist_name"]),
+                    "set_order": data.get("set_order"),
+                    "set_start": data.get("set_start"),
+                    "set_end": data.get("set_end"),
+                }
+            )
     for entry in grouped.values():
         entry["artist_names"] = list(dict.fromkeys(entry["artist_names"]))
     return list(grouped.values())
@@ -602,6 +611,7 @@ def add_truck_points(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "links": json_value(truck.get("links"), []),
             "source": truck.get("source"),
             "artist_names": artist_names,
+            "artist_slots": truck.get("artist_slots") or [],
             "track_count": len(tracks),
             "tracks": tracks,
         }
@@ -784,6 +794,9 @@ def fetch_love_mobiles_by_artist(conn: sqlite3.Connection) -> dict[int, list[dic
             alm.artist_name,
             alm.artist_bio,
             alm.artist_links,
+            alm.set_order,
+            alm.set_start,
+            alm.set_end,
             lm.id,
             lm.uuid,
             lm.source_index,
@@ -822,6 +835,9 @@ def fetch_love_mobiles_by_artist(conn: sqlite3.Connection) -> dict[int, list[dic
                 "artist_name": row["artist_name"],
                 "artist_bio": row["artist_bio"],
                 "artist_links": json_value(row["artist_links"], []),
+                "set_order": row["set_order"],
+                "set_start": row["set_start"],
+                "set_end": row["set_end"],
             }
         )
     return result

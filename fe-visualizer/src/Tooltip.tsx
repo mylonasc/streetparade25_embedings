@@ -1,5 +1,6 @@
 import {Play, SkipForward, ThumbsDown, ThumbsUp, Truck} from 'lucide-react';
 import type {ReactNode} from 'react';
+import {artistSetRange, truckNumber} from './loveMobile';
 import type {Edge, Point, PreferenceValue} from './types';
 
 export type TooltipHandlers = {
@@ -82,10 +83,12 @@ function PointTooltipContent({point, thumbValue, truckScore, handlers}: {point: 
       ['Tracks', metadata.track_count || (metadata.tracks || []).length || 0],
       ['Cluster', point.cluster],
     ];
+    const setShield = artistSetShield(metadata.love_mobiles);
     return (
       <>
         <strong>{point.label}</strong>
         {rows.map(([key, value]) => <span key={key}>{key}: {String(value)}</span>)}
+        {setShield && <span className="tooltip-time-shield time-shield">{setShield}</span>}
         <div className="tooltip-actions">
           <ThumbButtons value={thumbValue} onThumb={(value) => handlers.onThumb(point, value)} />
           {handlers.onPlayArtistSong && <button type="button" aria-label="Select artist song" onClick={() => handlers.onPlayArtistSong?.(point)}><Play size={18} aria-hidden="true" /> song</button>}
@@ -111,8 +114,18 @@ function PointTooltipContent({point, thumbValue, truckScore, handlers}: {point: 
   );
 }
 
-function EdgeTooltipContent({edge, byId}: {edge: Edge; byId: Map<string, Point>}) {
-  const source = byId.get(edge.source);
+function artistSetShield(loveMobiles: unknown): string | null {
+  if (!Array.isArray(loveMobiles)) return null;
+  for (const loveMobile of loveMobiles) {
+    const range = artistSetRange(loveMobile as {set_start?: string; set_end?: string});
+    if (!range) continue;
+    const number = truckNumber(loveMobile as {number?: number | string; source_index?: number});
+    return `Set ${number ? `#${number} ` : ''}${range.start}–${range.end}`;
+  }
+  return null;
+}
+
+function EdgeTooltipContent({edge, byId}: {edge: Edge; byId: Map<string, Point>}) {  const source = byId.get(edge.source);
   const target = byId.get(edge.target);
   const rows: Array<[string, string | number]> = [
     ['From', source?.label || edge.source],

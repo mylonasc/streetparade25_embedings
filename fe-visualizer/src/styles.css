@@ -149,10 +149,15 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .truck-facts { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 6px 12px; margin: 0; }
 .truck-facts dt { color: var(--muted); font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
 .truck-facts dd { margin: 0; font-size: 0.88rem; }
-.truck-artist-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 9px 10px; border-radius: 14px; color: var(--text); background: rgba(255,255,255,0.06); text-align: left; }
+.truck-artist-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; width: 100%; padding: 9px 10px; border-radius: 14px; color: var(--text); background: rgba(255,255,255,0.06); text-align: left; }
 .truck-artist-row:hover { transform: none; color: #06100c; background: var(--accent); }
 .truck-artist-row span { color: inherit; opacity: 0.68; font-size: 0.82rem; font-weight: 900; }
 .truck-artist-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.time-shield { display: inline-flex; align-items: center; flex: none; padding: 2px 8px; border-radius: 999px; color: #06100c; background: var(--accent); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.02em; white-space: nowrap; }
+.artist-set-shields { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tooltip .tooltip-time-shield { align-self: center; color: #06100c; opacity: 1; }
+.truck-artist-row .time-shield { opacity: 1; }
+.artist-set-shields .time-shield { color: #06100c; }
 .truck-artist-songs { justify-self: end; }
 .eyebrow svg { vertical-align: -2px; margin-right: 2px; }
 .actions { display: grid; gap: 10px; }

@@ -43,6 +43,7 @@ const OVERLAP_GROUPS = [
   '.shared-artists',
   '.share-player',
   '.playlist',
+  '.truck-artist-row',
   '.tooltip-actions',
 ];
 

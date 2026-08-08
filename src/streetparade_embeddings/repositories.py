@@ -201,6 +201,9 @@ def upsert_artist_love_mobile(
     artist_bio: str | None,
     artist_links: list[dict[str, Any]],
     now: Callable[[], str],
+    set_order: int | None = None,
+    set_start: str | None = None,
+    set_end: str | None = None,
 ) -> dict[str, Any]:
     """Create or update the relation between an artist and a love mobile.
 
@@ -211,6 +214,9 @@ def upsert_artist_love_mobile(
         artist_bio: Bio from the love-mobile source page, if present.
         artist_links: Social/link data from the love-mobile source page.
         now: Clock function used for timestamps.
+        set_order: Play order of the artist's set on the truck (0-based).
+        set_start: Start of the artist's set as ``HH:MM``, if computed.
+        set_end: End of the artist's set as ``HH:MM``, if computed.
 
     Returns:
         Stored relation row as a dictionary.
@@ -220,16 +226,31 @@ def upsert_artist_love_mobile(
         conn.execute(
             """
             INSERT INTO artist_love_mobiles (
-                artist_id, love_mobile_id, artist_name, artist_bio, artist_links, created_at, updated_at
+                artist_id, love_mobile_id, artist_name, artist_bio, artist_links,
+                set_order, set_start, set_end, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(artist_id, love_mobile_id) DO UPDATE SET
                 artist_name = excluded.artist_name,
                 artist_bio = COALESCE(excluded.artist_bio, artist_love_mobiles.artist_bio),
                 artist_links = excluded.artist_links,
+                set_order = COALESCE(excluded.set_order, artist_love_mobiles.set_order),
+                set_start = COALESCE(excluded.set_start, artist_love_mobiles.set_start),
+                set_end = COALESCE(excluded.set_end, artist_love_mobiles.set_end),
                 updated_at = excluded.updated_at
             """,
-            (artist_id, love_mobile_id, artist_name, artist_bio, json.dumps(artist_links), timestamp, timestamp),
+            (
+                artist_id,
+                love_mobile_id,
+                artist_name,
+                artist_bio,
+                json.dumps(artist_links),
+                set_order,
+                set_start,
+                set_end,
+                timestamp,
+                timestamp,
+            ),
         )
         row = conn.execute(
             "SELECT * FROM artist_love_mobiles WHERE artist_id = ? AND love_mobile_id = ?",
