@@ -68,6 +68,37 @@ uv run python scripts/build_embedding_visualization.py \
 
 `site/` and `scripts/.data_cache/*.json` are ignored because they are generated outputs.
 
+## PVC Database Snapshot
+
+The live and test deployments keep their runtime data (SQLite metadata DB plus
+the NumPy vector store) on a PVC mounted at `/data` in the API pod. Because the
+DB is SQLite in WAL mode and actively written, a plain `kubectl cp` is not safe.
+`scripts/backup_pvc_data.py` takes a consistent snapshot with zero downtime:
+it runs SQLite's online `backup()` API inside the running API pod, copies the
+snapshot + `vectorstore/` out with `kubectl cp`, verifies the local copy with
+`PRAGMA integrity_check`, then removes the pod temp dir.
+
+```bash
+uv run python scripts/backup_pvc_data.py            # prod (sp26-emb-live)
+uv run python scripts/backup_pvc_data.py --namespace sp26-test
+uv run python scripts/backup_pvc_data.py --dry-run  # print commands without running
+```
+
+Options:
+
+- `--namespace <ns>` (default `sp26-emb-live`): namespace of the deployment to
+  snapshot; use `sp26-test` for the test deployment.
+- `--out <dir>` (default `data-snapshots/<namespace>-<timestamp>`): local output
+  directory. Refuses to run if it already exists and is not empty.
+- `--db-path` / `--vectorstore-dir` (defaults `/data/streetparade_embeddings.sqlite3`
+  and `/data/vectorstore`): paths inside the API pod, usually left at defaults.
+- `--keep`: keep the temp snapshot dir in the pod after copying out.
+- `--dry-run`: print the commands without running them.
+
+Requires `kubectl` configured for the cluster and Python's `sqlite3` in the API
+pod image (the minimal backend image has it). The API pod is found by the label
+selector `app.kubernetes.io/component=api` in the target namespace.
+
 ## DockerHub Images
 
 Build the test or prod DockerHub images locally with the same tags the CI

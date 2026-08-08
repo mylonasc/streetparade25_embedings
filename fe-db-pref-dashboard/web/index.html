@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SP26 Preference Dashboard</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="dashboard">
+    <header class="dashboard-header">
+      <h1>SP26 Preference Dashboard</h1>
+      <p id="status" class="status">Loading…</p>
+    </header>
+
+    <section class="table-wrap">
+      <table class="users">
+        <thead>
+          <tr>
+            <th scope="col">Username</th>
+            <th scope="col" class="num">Likes (up)</th>
+            <th scope="col" class="num">Unlikes (down)</th>
+            <th scope="col" class="num">Cleared</th>
+            <th scope="col" class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

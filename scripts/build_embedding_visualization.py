@@ -332,6 +332,9 @@ def load_love_mobiles_by_artist(conn: sqlite3.Connection) -> dict[int, list[dict
             alm.artist_name,
             alm.artist_bio,
             alm.artist_links,
+            alm.set_order,
+            alm.set_start,
+            alm.set_end,
             lm.id,
             lm.uuid,
             lm.source_index,
@@ -370,6 +373,9 @@ def load_love_mobiles_by_artist(conn: sqlite3.Connection) -> dict[int, list[dict
                 "artist_name": row["artist_name"],
                 "artist_bio": row["artist_bio"],
                 "artist_links": json_data(row["artist_links"], []),
+                "set_order": row["set_order"],
+                "set_start": row["set_start"],
+                "set_end": row["set_end"],
             }
         )
     return result
