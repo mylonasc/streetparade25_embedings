@@ -261,14 +261,16 @@ iframe, audio { width: 100%; margin-top: 10px; border-radius: 14px; }
 .time-range-track-wrap { position: relative; height: 26px; }
 .time-range-track { position: absolute; left: 0; right: 0; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 999px; background: rgba(255, 255, 255, 0.16); }
 .time-range-track-fill { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); border-radius: 999px; background: var(--accent); }
-.time-range-input { position: absolute; inset: 0; width: 100%; height: 26px; margin: 0; -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none; }
+.time-range-input { position: absolute; inset: 0; width: 100%; height: 26px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; -webkit-appearance: none; appearance: none; background: transparent; pointer-events: none; }
 .time-range-input::-webkit-slider-runnable-track { height: 26px; background: transparent; }
 .time-range-input::-moz-range-track { height: 26px; background: transparent; }
-.time-range-input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: 4px; border-radius: 50%; border: 2px solid #06100c; background: var(--accent); pointer-events: auto; cursor: grab; }
-.time-range-input::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #06100c; background: var(--accent); pointer-events: auto; cursor: grab; }
+.time-range-input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin-top: 4px; border-radius: 50%; border: 2px solid #06100c; background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); pointer-events: auto; cursor: grab; }
+.time-range-input::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #06100c; background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); pointer-events: auto; cursor: grab; }
 .time-range-input:focus-visible { outline: none; }
 .time-range-input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
 .time-range-input:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.time-range-input::-webkit-slider-thumb:active { cursor: grabbing; }
+.time-range-input::-moz-range-thumb:active { cursor: grabbing; }
 .time-range-from { z-index: 3; }
 .time-range-until { z-index: 2; }
 .truck-time-widget { position: relative; display: block; width: 100%; height: 16px; margin: 6px 0 2px; }

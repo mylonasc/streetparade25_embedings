@@ -142,12 +142,36 @@ async function checkNoGroupOverlap(page, stage) {
   expect(offenders, `${stage}: sibling elements must not overlap (see offender list)`).toEqual([]);
 }
 
+async function checkRangeInputsContained(page, stage) {
+  const offenders = await page.evaluate(() => {
+    const out = [];
+    for (const wrap of document.querySelectorAll('.time-range-track-wrap')) {
+      const w = wrap.getBoundingClientRect();
+      for (const input of wrap.querySelectorAll('.time-range-input')) {
+        const r = input.getBoundingClientRect();
+        if (r.top < w.top - 1 || r.bottom > w.bottom + 1) {
+          out.push({
+            cls: input.className,
+            inputTop: Math.round(r.top),
+            wrapTop: Math.round(w.top),
+            inputBottom: Math.round(r.bottom),
+            wrapBottom: Math.round(w.bottom),
+          });
+        }
+      }
+    }
+    return out;
+  });
+  expect(offenders, `${stage}: range inputs must fit inside their track wrap (no vertical overflow into the list below)`).toEqual([]);
+}
+
 async function runChecks(page, slug, stage) {
   await snapshot(page, slug, stage);
   await checkNoHorizontalOverflow(page, stage);
   await checkNoClippedText(page, stage);
   await checkNoElementPastRightEdge(page, stage);
   await checkNoGroupOverlap(page, stage);
+  await checkRangeInputsContained(page, stage);
 }
 
 module.exports = {
@@ -157,4 +181,5 @@ module.exports = {
   checkNoClippedText,
   checkNoElementPastRightEdge,
   checkNoGroupOverlap,
+  checkRangeInputsContained,
 };
