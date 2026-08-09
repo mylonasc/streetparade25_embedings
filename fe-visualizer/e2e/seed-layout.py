@@ -234,6 +234,23 @@ def seed(target: Path) -> None:
                 }
             )
 
+        points.append(
+            {
+                "id": "track-90000",
+                "kind": "track",
+                "label": (
+                    "Seed track 90000 - long-label-ellipsis regression: a deliberately very long "
+                    "track label that must render as a single line with an ellipsis inside the "
+                    "in-canvas search results instead of blowing out the map-card grid track or "
+                    "being clipped without an ellipsis indicator"
+                ),
+                "x": 19.5,
+                "y": 19.5,
+                "cluster": 0,
+                "metadata": {},
+            }
+        )
+
         conn.execute(
             """
             INSERT OR REPLACE INTO embedding_layouts

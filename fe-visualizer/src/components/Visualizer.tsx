@@ -4,6 +4,7 @@ import {isMarked, preferenceKeyForPoint} from '../selection';
 import {computeTooltipPosition} from '../tooltipPosition';
 import {TooltipContent, type TooltipData, type TooltipHandlers} from '../Tooltip';
 import {isFinePointer} from '../responsive';
+import {resolveTheme, withAlpha, type ThemePalette} from '../theme';
 import type {Point, Prediction, PreferenceValue, SimilarityEdge} from '../types';
 
 type HitPoint = {point: Point; x: number; y: number; radius: number};
@@ -46,29 +47,30 @@ function pointFill(
   colorByPreference: boolean,
   colorByPredictedPreference: boolean,
   truckScores: Record<string, number>,
+  theme: ThemePalette,
 ): string {
   if (point.kind === 'truck') {
     const score = truckScores?.[point.id] ?? 0;
-    if (score >= 0.35) return '#85f5c4';
-    return '#ffd166';
+    if (score >= 0.35) return theme.accent;
+    return theme.predicted;
   }
   if (colorByPreference) {
     const preference = thumbPreferences?.[preferenceKeyForPoint(point) ?? ''];
-    if (preference === 'up') return '#85f5c4';
-    if (preference === 'down') return '#ff5c35';
-    return point.kind === 'artist' ? 'rgba(133, 245, 196, 0.42)' : 'rgba(154, 168, 189, 0.46)';
+    if (preference === 'up') return theme.accent;
+    if (preference === 'down') return theme.warm;
+    return point.kind === 'artist' ? withAlpha(theme.accent, 0.42) : withAlpha(theme.muted, 0.46);
   }
   if (colorByPredictedPreference) {
     const preference = thumbPreferences?.[preferenceKeyForPoint(point) ?? ''];
     const prediction = predictedPreferences?.[preferenceKeyForPoint(point) ?? ''];
-    if (preference === 'up') return '#85f5c4';
-    if (preference === 'down') return '#ff5c35';
-    if (prediction?.value === 'up') return '#b7ffd9';
-    if (prediction?.value === 'down') return '#ff9a7f';
-    return point.kind === 'artist' ? 'rgba(133, 245, 196, 0.42)' : 'rgba(154, 168, 189, 0.38)';
+    if (preference === 'up') return theme.accent;
+    if (preference === 'down') return theme.warm;
+    if (prediction?.value === 'up') return theme.predictedUp;
+    if (prediction?.value === 'down') return theme.predictedDown;
+    return point.kind === 'artist' ? withAlpha(theme.accent, 0.42) : withAlpha(theme.muted, 0.38);
   }
-  if (point.kind === 'user_track') return '#ff5c35';
-  if (point.kind === 'artist') return '#85f5c4';
+  if (point.kind === 'user_track') return theme.warm;
+  if (point.kind === 'artist') return theme.accent;
   return clusterColor(point.cluster);
 }
 
@@ -94,7 +96,7 @@ function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: n
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
-function drawLoadingMap(context: CanvasRenderingContext2D, width: number, height: number, timestamp: number) {
+function drawLoadingMap(context: CanvasRenderingContext2D, width: number, height: number, timestamp: number, theme: ThemePalette) {
   const centerX = width / 2;
   const centerY = height / 2;
   const radius = Math.min(width, height) * 0.14;
@@ -104,7 +106,7 @@ function drawLoadingMap(context: CanvasRenderingContext2D, width: number, height
   for (let ring = 0; ring < 3; ring += 1) {
     context.beginPath();
     context.arc(centerX, centerY, radius + ring * 23, 0, Math.PI * 2);
-    context.strokeStyle = `rgba(133, 245, 196, ${0.15 - ring * 0.035})`;
+    context.strokeStyle = withAlpha(theme.accent, 0.15 - ring * 0.035);
     context.stroke();
   }
   for (let idx = 0; idx < 22; idx += 1) {
@@ -115,14 +117,14 @@ function drawLoadingMap(context: CanvasRenderingContext2D, width: number, height
     const pulse = (Math.sin(phase * 2.2 + idx * 0.65) + 1) / 2;
     context.beginPath();
     context.arc(x, y, 2.4 + pulse * 3.6, 0, Math.PI * 2);
-    context.fillStyle = `rgba(133, 245, 196, ${0.24 + pulse * 0.58})`;
+    context.fillStyle = withAlpha(theme.accent, 0.24 + pulse * 0.58);
     context.fill();
   }
-  context.fillStyle = '#eff6ff';
+  context.fillStyle = theme.text;
   context.font = '800 16px Inter, system-ui, sans-serif';
   context.textAlign = 'center';
   context.fillText('Loading embeddings', centerX, centerY + radius + 68);
-  context.fillStyle = 'rgba(239, 246, 255, 0.56)';
+  context.fillStyle = withAlpha(theme.text, 0.56);
   context.font = '700 12px Inter, system-ui, sans-serif';
   context.fillText('Preparing the map', centerX, centerY + radius + 90);
   context.restore();
@@ -186,6 +188,7 @@ export function Visualizer(props: VisualizerProps) {
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     const finePointer = isFinePointer();
+    const theme = resolveTheme();
 
     if (!points.length) {
       let loadingFrame: number | null = null;
@@ -197,7 +200,7 @@ export function Visualizer(props: VisualizerProps) {
         context.fillStyle = 'rgba(255, 255, 255, 0.035)';
         roundedRect(context, 0, 0, width, height, 24);
         context.fill();
-        if (loading) drawLoadingMap(context, width, height, timestamp);
+        if (loading) drawLoadingMap(context, width, height, timestamp, theme);
         context.restore();
         if (loading) loadingFrame = requestAnimationFrame(drawEmpty);
       }
@@ -265,10 +268,10 @@ export function Visualizer(props: VisualizerProps) {
       context.beginPath();
       symbol.type(point.kind === 'user_track' ? d3.symbolStar : point.kind === 'artist' ? d3.symbolDiamond : point.kind === 'truck' ? d3.symbolStar : d3.symbolCircle).size(size)();
       context.globalAlpha = state.alpha;
-      context.fillStyle = pointFill(point, clusterColor, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, truckScores);
+      context.fillStyle = pointFill(point, clusterColor, thumbPreferences, predictedPreferences, colorByPreference, colorByPredictedPreference, truckScores, theme);
       context.fill();
       context.lineWidth = state.isSelected ? 4 : state.isLinked || state.isSearchMatch || state.isClusterMatch ? 3 : 1.2;
-      context.strokeStyle = state.isSelected ? '#fff' : state.isSearchMatch || state.isClusterMatch ? '#ffd166' : state.isLinked || state.isMarked ? '#85f5c4' : 'rgba(255,255,255,0.85)';
+      context.strokeStyle = state.isSelected ? '#fff' : state.isSearchMatch || state.isClusterMatch ? theme.predicted : state.isLinked || state.isMarked ? theme.accent : 'rgba(255,255,255,0.85)';
       context.stroke();
       context.restore();
       return {point, x: sx, y: sy, radius: Math.max(11, Math.sqrt(size) * scale)};
@@ -296,7 +299,7 @@ export function Visualizer(props: VisualizerProps) {
         context.beginPath();
         context.moveTo(x1, y1);
         context.lineTo(x2, y2);
-        context.strokeStyle = '#85f5c4';
+        context.strokeStyle = theme.accent;
         context.globalAlpha = edge.similarity === null || edge.similarity === undefined ? 0.72 : Math.max(0.28, Math.min(0.9, edge.similarity));
         context.lineWidth = 2.4;
         context.lineCap = 'round';

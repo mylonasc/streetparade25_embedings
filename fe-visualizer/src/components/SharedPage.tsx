@@ -3,7 +3,8 @@ import {useEffect, useMemo, useRef, useState, type KeyboardEvent} from 'react';
 import {parseTimeRange} from '../loveMobile';
 import {eventRangeFromTrucks, rangeInMinutes, truckOverlapsWindow} from '../truckTime';
 import type {ClockRange, MinuteRange} from '../truckTime';
-import {TimeRangeSlider, TruckTimeWidget, slotLabel} from './TruckTimeWidget';
+import {TimeRangeSlider} from './TimeRangeSlider';
+import {TruckTimeWidget, slotLabel} from './TruckTimeWidget';
 import type {SharedPayload, SharedTruck} from '../types';
 
 type TruckSort = 'score' | 'order';

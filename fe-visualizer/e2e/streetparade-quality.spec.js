@@ -1,7 +1,12 @@
 const { test, expect, devices } = require('@playwright/test');
-const { runChecks } = require('./quality-checks.cjs');
+const { runChecks, checkSearchResultsFit, reseede2e } = require('./quality-checks.cjs');
 
 test.use({ browserName: 'chromium' });
+
+// The layout spec may have recomputed an anonymous layout by the time this
+// spec runs; re-seed so the long-label search-result regression point is
+// present in the anonymous baseline for every device below.
+test.beforeAll(() => reseede2e());
 
 const DEVICES = [
   { name: 'Pixel 7', slug: 'pixel-7' },
@@ -85,6 +90,7 @@ for (const device of DEVICES) {
       await page.getByPlaceholder('Search artists, tracks, URLs...').fill(searchTerm);
       await expect(page.locator('.search-results button').first()).toBeVisible();
       await runChecks(page, slug, '03-search');
+      await checkSearchResultsFit(page, slug);
 
       await page.locator('.search-results button').first().click();
       const sheet = page.locator('.selection-panel.has-selection');

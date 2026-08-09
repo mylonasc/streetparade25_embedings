@@ -1,8 +1,23 @@
 const path = require('node:path');
 const fs = require('node:fs');
+const { execFileSync } = require('node:child_process');
 const { expect } = require('@playwright/test');
 
 const SHOT_ROOT = path.join(__dirname, 'screenshots');
+
+// Mirrors the seed command in playwright.config.js: the runtime database is
+// copied fresh from the repository source and re-seeded. The layout spec can
+// recompute an anonymous layout in between, which would otherwise shadow the
+// seeded baseline for tests that run afterwards.
+const E2E_REPO_ROOT = path.resolve(__dirname, '../..');
+const E2E_PYTHON = path.join(E2E_REPO_ROOT, '.venv', 'bin', 'python');
+const E2E_SEED_SCRIPT = path.join(__dirname, 'seed-layout.py');
+const E2E_SOURCE_DB = path.join(E2E_REPO_ROOT, 'streetparade_embeddings.sqlite3');
+const E2E_RUNTIME_DB = '/tmp/sp26-e2e.sqlite3';
+
+function reseede2e() {
+  execFileSync(E2E_PYTHON, [E2E_SEED_SCRIPT, E2E_SOURCE_DB, E2E_RUNTIME_DB], { stdio: 'inherit' });
+}
 
 // Containers whose direct children are laid out in a row/grid and must not overlap.
 const OVERLAP_GROUPS = [
@@ -165,6 +180,65 @@ async function checkRangeInputsContained(page, stage) {
   expect(offenders, `${stage}: range inputs must fit inside their track wrap (no vertical overflow into the list below)`).toEqual([]);
 }
 
+async function checkTimeRangeFill(page, stage) {
+  const offenders = await page.evaluate(() => {
+    const out = [];
+    for (const wrap of document.querySelectorAll('.time-range-track-wrap')) {
+      const fill = wrap.querySelector('.time-range-track-fill');
+      const from = wrap.querySelector('.time-range-from');
+      const until = wrap.querySelector('.time-range-until');
+      if (!fill || !from || !until) continue;
+      const wrapRect = wrap.getBoundingClientRect();
+      const fillRect = fill.getBoundingClientRect();
+      const min = Number(from.min);
+      const max = Number(from.max);
+      const span = Math.max(1, max - min);
+      const expectedLeft = wrapRect.left + ((Number(from.value) - min) / span) * wrapRect.width;
+      const expectedRight = wrapRect.left + ((Number(until.value) - min) / span) * wrapRect.width;
+      if (Math.abs(fillRect.left - expectedLeft) > 2 || Math.abs(fillRect.right - expectedRight) > 2) {
+        out.push({
+          fillLeft: Math.round(fillRect.left),
+          expectedLeft: Math.round(expectedLeft),
+          fillRight: Math.round(fillRect.right),
+          expectedRight: Math.round(expectedRight),
+        });
+      }
+    }
+    return out;
+  });
+  expect(offenders, `${stage}: the accent fill must span exactly the band between the from and until thumbs`).toEqual([]);
+}
+
+async function checkSearchResultsFit(page, stage) {
+  const LONG_LABEL_TOKEN = 'long-label-ellipsis';
+  const input = page.locator('.search-input-row input');
+  const original = await input.inputValue();
+  await input.fill(LONG_LABEL_TOKEN);
+  await expect(page.locator('.search-results button')).not.toHaveCount(0);
+  const offenders = await page.evaluate(() => {
+    const out = [];
+    let ellipsized = 0;
+    for (const button of document.querySelectorAll('.search-results button')) {
+      const style = getComputedStyle(button);
+      if (style.whiteSpace !== 'nowrap' || style.overflow !== 'hidden' || style.textOverflow !== 'ellipsis') {
+        out.push({ issue: 'missing single-line ellipsis rules', text: (button.textContent || '').slice(0, 40) });
+      }
+      const rect = button.getBoundingClientRect();
+      const parent = button.parentElement ? button.parentElement.getBoundingClientRect() : null;
+      if (rect.right > window.innerWidth) out.push({ issue: 'button past viewport', right: Math.round(rect.right) });
+      if (parent && rect.right > parent.right + 1) {
+        out.push({ issue: 'button past results list', parentRight: Math.round(parent.right), right: Math.round(rect.right) });
+      }
+      if (button.scrollWidth > button.clientWidth) ellipsized += 1;
+    }
+    if (ellipsized === 0) out.push({ issue: 'no long label was actually ellipsized' });
+    return out;
+  });
+  expect(offenders, `${stage}: search-result labels must be single-line ellipsized inside the map card`).toEqual([]);
+  await input.fill(original);
+  await expect(page.locator('.search-results button').first()).toBeVisible();
+}
+
 async function runChecks(page, slug, stage) {
   await snapshot(page, slug, stage);
   await checkNoHorizontalOverflow(page, stage);
@@ -177,9 +251,12 @@ async function runChecks(page, slug, stage) {
 module.exports = {
   OVERLAP_GROUPS,
   runChecks,
+  reseede2e,
   checkNoHorizontalOverflow,
   checkNoClippedText,
   checkNoElementPastRightEdge,
   checkNoGroupOverlap,
   checkRangeInputsContained,
+  checkTimeRangeFill,
+  checkSearchResultsFit,
 };

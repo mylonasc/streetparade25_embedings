@@ -108,6 +108,8 @@ REQUIRED_SOURCES: list[Source] = [
            [r"PreferenceTrainingPanel", r"ArtistFavoritesPanel", r"UsernameGate"]),
     Source("fe-visualizer/src/components/Modals.tsx", "Modals.tsx",
            [r"LayoutModal", r"HelpModal", r"TrainModelPrompt"]),
+    Source("fe-visualizer/src/components/RangeSlider.tsx", "RangeSlider.tsx",
+           [r"export function RangeSlider", r"classPrefix"]),
     Source("fe-visualizer/src/Tooltip.tsx", "Tooltip.tsx", [r"TooltipContent"]),
     Source("fe-visualizer/src/tooltipPosition.ts", "tooltipPosition.ts", [r"computeTooltipPosition"]),
     Source("fe-visualizer/src/search.ts", "search.ts", [r"buildSearchIndex", r"searchResults"]),

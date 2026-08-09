@@ -703,7 +703,7 @@ export function App() {
               </div>
               {searchQuery.trim() && (
                 <div className="search-results">
-                  {visibleSearchResults.slice(0, 8).map((point) => <button type="button" key={point.id} onClick={() => selectPoint(point)}>{point.label}</button>)}
+                  {visibleSearchResults.slice(0, 8).map((point) => <button type="button" key={point.id} title={point.label} onClick={() => selectPoint(point)}>{point.label}</button>)}
                   {!visibleSearchResults.length && <span>No matches</span>}
                 </div>
               )}

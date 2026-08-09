@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { checkTimeRangeFill } = require('./quality-checks.cjs');
 
 // Fabricated shared payload used to exercise the shared favorites page without
 // depending on the seeded DB having loved trucks or set times.
@@ -72,6 +73,11 @@ test.describe('time and preference filters', () => {
     await page.locator('.time-range-until').fill('900'); // until 15:00
     await expect(page.locator('.liked-trucks-list li')).toHaveCount(1);
     await expect(page.locator('.liked-trucks-list li').first()).toContainText('#9');
+    await checkTimeRangeFill(page, 'shared-until-900');
+
+    await page.locator('.time-range-from').fill('840'); // from 14:00
+    await expect(page.locator('.liked-trucks-list li')).toHaveCount(1);
+    await checkTimeRangeFill(page, 'shared-from-840');
 
     await page.locator('.time-range-until').fill('1290'); // back to full window
     await expect(page.locator('.liked-trucks-list li')).toHaveCount(3);
@@ -110,6 +116,7 @@ test.describe('time and preference filters', () => {
     await page.locator('.liked-trucks-modal .time-range-until').fill('840'); // until 14:00
     await expect(page.locator('.liked-trucks-list li')).toHaveCount(1);
     await expect(page.locator('.liked-trucks-list li').first()).toContainText('#9');
+    await checkTimeRangeFill(page, 'modal-until-840');
   });
 
   test('modal preference filter narrows the truck list', async ({ page }) => {

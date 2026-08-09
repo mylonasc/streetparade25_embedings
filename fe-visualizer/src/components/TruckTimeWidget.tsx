@@ -48,55 +48,6 @@ function widgetLabel(event: MinuteRange | null, truck: MinuteRange | null, liked
   return parts.join('; ');
 }
 
-export type TimeRangeSliderProps = {
-  min: number;
-  max: number;
-  step?: number;
-  from: number;
-  until: number;
-  onChange: (from: number, until: number) => void;
-};
-
-export function TimeRangeSlider({min, max, step = 15, from, until, onChange}: TimeRangeSliderProps) {
-  const clamp = (value: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, value));
-  const fromValue = clamp(from, min, max);
-  const untilValue = clamp(until, min, max);
-  const span = Math.max(1, max - min);
-  const leftPct = ((fromValue - min) / span) * 100;
-  const widthPct = ((untilValue - fromValue) / span) * 100;
-  return (
-    <div className="time-range-filter">
-      <span className="time-range-labels">
-        Time <b>{minutesToTime(fromValue)}</b> – <b>{minutesToTime(untilValue)}</b>
-      </span>
-      <div className="time-range-track-wrap">
-        <span className="time-range-track" aria-hidden="true" />
-        <span className="time-range-track-fill" aria-hidden="true" style={{left: `${leftPct}%`, width: `${widthPct}%`}} />
-        <input
-          type="range"
-          className="time-range-input time-range-from"
-          min={min}
-          max={max}
-          step={step}
-          value={fromValue}
-          aria-label="Earliest time"
-          onChange={(event) => onChange(clamp(Number(event.target.value), min, untilValue), untilValue)}
-        />
-        <input
-          type="range"
-          className="time-range-input time-range-until"
-          min={min}
-          max={max}
-          step={step}
-          value={untilValue}
-          aria-label="Latest time"
-          onChange={(event) => onChange(fromValue, clamp(Number(event.target.value), fromValue, max))}
-        />
-      </div>
-    </div>
-  );
-}
-
 export function slotLabel(slot: {name?: string; set_start?: string | null; set_end?: string | null}): string {
   const range = parseTimeRange(`${slot.set_start ?? ''} - ${slot.set_end ?? ''}`);
   if (!range) return slot.name || '';

@@ -5,7 +5,8 @@ import {loveMobileTitle, parseTimeRange, truckNumber} from '../loveMobile';
 import {eventRangeFromTrucks, rangeInMinutes, truckOverlapsWindow} from '../truckTime';
 import type {ClockRange, MinuteRange} from '../truckTime';
 import {ShareMenu} from './ShareMenu';
-import {TimeRangeSlider, TruckTimeWidget, slotLabel} from './TruckTimeWidget';
+import {TimeRangeSlider} from './TimeRangeSlider';
+import {TruckTimeWidget, slotLabel} from './TruckTimeWidget';
 import type {LayoutOptions} from '../layoutOptions';
 import type {LikedTruck, LoveMobile} from '../types';
 
