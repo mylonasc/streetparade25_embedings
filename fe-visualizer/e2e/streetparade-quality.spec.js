@@ -29,6 +29,28 @@ async function resolveSearchTerm(visualizationResponse) {
   return term;
 }
 
+async function timeRangeBounds(page, container) {
+  return page.locator(`${container} .time-range-input`).first().evaluate((el) => ({
+    min: Number(el.min || 0),
+    max: Number(el.max || 100),
+    step: Number(el.step || 1),
+  }));
+}
+
+// Range inputs report "Malformed value" unless (value - min) is a whole
+// multiple of step, and the min/max differ per run (they follow the trucks'
+// event window). Snap requested fractions to the slider's own grid.
+async function setTimeRange(page, container, fromFraction, untilFraction) {
+  const { min, max, step } = await timeRangeBounds(page, container);
+  const snap = (fraction) => min + Math.floor(((max - min) * fraction) / step) * step;
+  await page.locator(`${container} .time-range-from`).fill(String(snap(fromFraction)));
+  await page.locator(`${container} .time-range-until`).fill(String(snap(untilFraction)));
+}
+
+async function resetTimeRange(page, container) {
+  await setTimeRange(page, container, 0, 1);
+}
+
 for (const device of DEVICES) {
   test.describe(`visual quality - ${device.name}`, () => {
     const { defaultBrowserType, ...deviceOptions } = devices[device.name];
@@ -87,7 +109,13 @@ for (const device of DEVICES) {
 
       await page.locator('.artist-favorites-panel').getByRole('button', { name: 'Show loved trucks' }).click();
       await expect(page.locator('.liked-trucks-modal')).toBeVisible();
+      await expect(page.locator('.liked-trucks-modal .share-score-filter input')).toBeVisible();
+      await expect(page.locator('.liked-trucks-modal .time-range-input').first()).toBeVisible();
       await runChecks(page, slug, '06c-loved-trucks-modal');
+
+      await setTimeRange(page, '.liked-trucks-modal', 0.3, 0.7);
+      await runChecks(page, slug, '06c2-loved-trucks-sliders');
+      await resetTimeRange(page, '.liked-trucks-modal');
 
       await page.locator('.liked-trucks-modal').getByRole('button', { name: 'Share' }).click();
       await expect(page.locator('.liked-trucks-modal .share-menu-dropdown')).toBeVisible();
@@ -106,7 +134,13 @@ for (const device of DEVICES) {
       await expect(sharedPage.locator('.share-page')).toBeVisible();
       await expect(sharedPage.locator('.share-page h1')).not.toBeEmpty();
       expect(await sharedPage.locator('.share-page').textContent()).toContain(username);
+      await expect(sharedPage.locator('.share-page .share-score-filter input')).toBeVisible();
+      await expect(sharedPage.locator('.share-page .time-range-input').first()).toBeVisible();
       await runChecks(sharedPage, slug, '06e-shared-page');
+
+      await setTimeRange(sharedPage, '.share-page', 0.3, 0.7);
+      await runChecks(sharedPage, slug, '06e2-shared-sliders');
+      await resetTimeRange(sharedPage, '.share-page');
       await sharedPage.locator('.share-page').getByRole('button', { name: 'Explore the map' }).click();
       await expect(sharedPage.locator('canvas.plot')).toBeVisible();
       await runChecks(sharedPage, slug, '06f-shared-page-entered');
