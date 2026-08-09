@@ -1,4 +1,5 @@
 const { test, expect, devices } = require('@playwright/test');
+const { checkNoHorizontalOverflow } = require('./quality-checks.cjs');
 
 test.use({ ...devices['iPhone 13'], browserName: 'chromium' });
 
@@ -16,13 +17,7 @@ test('mobile layout keeps the page inside the viewport', async ({ page }) => {
   test.setTimeout(300_000);
   await enterVisualizer(page);
 
-  const overflow = await page.evaluate(() => ({
-    documentWidth: document.documentElement.scrollWidth,
-    bodyWidth: document.body.scrollWidth,
-    innerWidth: window.innerWidth,
-  }));
-  expect(overflow.documentWidth, `document scrollWidth (${overflow.documentWidth}) must not exceed viewport (${overflow.innerWidth})`).toBeLessThanOrEqual(overflow.innerWidth);
-  expect(overflow.bodyWidth, `body scrollWidth (${overflow.bodyWidth}) must not exceed viewport (${overflow.innerWidth})`).toBeLessThanOrEqual(overflow.innerWidth);
+  await checkNoHorizontalOverflow(page, 'mobile-viewport');
 });
 
 test('map toolbar targets are at least 44x44px on a coarse pointer', async ({ page }) => {

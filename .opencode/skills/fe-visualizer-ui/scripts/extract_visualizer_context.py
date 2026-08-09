@@ -128,12 +128,14 @@ REQUIRED_SOURCES: list[Source] = [
     Source("src/streetparade_embeddings/routes/catalog.py", "backend routes/catalog.py", [r"APIRouter\("]),
     Source("src/streetparade_embeddings/routes/users.py", "backend routes/users.py", [r"APIRouter\("]),
     Source("src/streetparade_embeddings/routes/jobs.py", "backend routes/jobs.py", [r"APIRouter\("]),
-    Source("e2e/package.json", "e2e package.json", [r"@playwright/test"]),
-    Source("e2e/playwright.config.js", "playwright.config.js", [r"webServer"]),
-    Source("e2e/seed-layout.py", "seed-layout.py", [r"SEED_CLUSTERS"]),
-    Source("e2e/streetparade-quality.spec.js", "quality spec", [r"test\(", r"OVERLAP_GROUPS"]),
-    Source("e2e/streetparade-mobile.spec.js", "mobile spec", [r"test\("]),
-    Source("e2e/streetparade-layout.spec.js", "layout spec", [r"test\("]),
+    Source("fe-visualizer/e2e/package.json", "e2e package.json", [r"@playwright/test"]),
+    Source("fe-visualizer/e2e/playwright.config.js", "playwright.config.js", [r"webServer"]),
+    Source("fe-visualizer/e2e/seed-layout.py", "seed-layout.py", [r"SEED_CLUSTERS"]),
+    Source("fe-visualizer/e2e/streetparade-quality.spec.js", "quality spec", [r"test\(", r"runChecks"]),
+    Source("fe-visualizer/e2e/quality-checks.cjs", "quality-checks module", [r"OVERLAP_GROUPS", r"runChecks"]),
+    Source("fe-visualizer/e2e/streetparade-mobile.spec.js", "mobile spec", [r"test\("]),
+    Source("fe-visualizer/e2e/streetparade-layout.spec.js", "layout spec", [r"test\("]),
+    Source("fe-visualizer/e2e/streetparade-filters.spec.js", "filters spec", [r"test\("]),
 ]
 
 # --------------------------------------------------------------------------
@@ -368,7 +370,7 @@ def main() -> int:
     print_section("Tests")
     vitest_files = sorted(comp_root.glob("*.test.ts")) if comp_root.is_dir() else []
     print(f"- vitest unit files: {[p.name for p in vitest_files]}")
-    for spec in sorted((root / "e2e").glob("*.spec.js")):
+    for spec in sorted((root / "fe-visualizer" / "e2e").glob("*.spec.js")):
         spec_text = spec.read_text(encoding="utf-8")
         count = len(re.findall(r"(?<!\.)\btest\(", spec_text))
         devices = re.findall(r"\{\s*name:\s*['\"]([^'\"]+)['\"]\s*,\s*slug:", spec_text)

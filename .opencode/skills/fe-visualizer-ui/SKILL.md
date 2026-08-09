@@ -285,7 +285,7 @@ fields) must invalidate that cache.
 4. Add markup + a dedicated class(es) in `styles.css`; follow the breakpoint and
    z-index rules above.
 5. If you add a flex/grid row whose children must not overlap, add its selector
-   to `OVERLAP_GROUPS` in `e2e/streetparade-quality.spec.js`.
+   to `OVERLAP_GROUPS` in `fe-visualizer/e2e/quality-checks.cjs`.
 6. Add `aria-*` labels for every new button/control.
 7. Verify: typecheck → unit tests → e2e (below). If behavior is mobile-specific,
    run the mobile spec too.
@@ -300,10 +300,14 @@ All commands run from `fe-visualizer/` unless noted.
 
 ```bash
 npm run typecheck      # tsc --noEmit (strict)
-npm run test:run       # vitest run (layoutOptions, search, selection, tooltipPosition)
+npm run test:run       # vitest run (all *.test.ts under src/)
 ```
 
-Expected: typecheck clean, 16/16 unit tests.
+Unit tests run through `vitest.config.ts`, which excludes the `e2e/` Playwright
+specs (they are CommonJS and would otherwise be picked up by vitest's default
+include glob).
+
+Expected: typecheck clean, 78/78 unit tests.
 
 ### Dev server
 
@@ -321,9 +325,9 @@ STREETPARADE_NUMPY_VECTOR_DIR=$PWD/vectorstore ENABLE_SONG_DL_AND_EMBEDINGS=0 \
 .venv/bin/python -m uvicorn streetparade_embeddings.api:app --port 8000
 ```
 
-### Playwright e2e (repo `e2e/`)
+### Playwright e2e (`fe-visualizer/e2e/`)
 
-Three specs, 10 tests total, all must pass:
+Four specs, 17 tests total, all must pass:
 - `streetparade-quality.spec.js` — one test × 5 devices (Pixel 7/10, iPhone SE/13/16):
   full flow with screenshot snapshots and structural checks: no horizontal
   overflow, no clipped text, no element past the right edge, no sibling overlap
@@ -333,22 +337,26 @@ Three specs, 10 tests total, all must pass:
   targets, hover tooltip hidden on touch, tapping a search result opens the sheet.
 - `streetparade-layout.spec.js` — recompute flow: 7 seeded clusters → request 5 →
   assert `/visualization` has exactly 5 distinct clusters and the UI dropdown matches.
+- `streetparade-filters.spec.js` — shared-page/modal truck filters: time-range and
+  score filters, timeline summary, and set-time tooltips on `TruckTimeWidget`.
 
-Prerequisites: backend deps in repo `.venv`; `cd e2e && npm install` and
-`npx playwright install chromium`.
+Prerequisites: backend deps in repo `.venv`; `cd fe-visualizer/e2e && npm install`
+and `npx playwright install chromium`.
 
 ```bash
-cd e2e
+cd fe-visualizer/e2e
 npx playwright test                 # all specs
 npx playwright test streetparade-mobile.spec.js   # subset
 npx playwright test --headed        # watch the browser
 ```
 
+From `fe-visualizer/` you can also run the whole suite with `npm run test:e2e`.
+
 `playwright.config.js` auto-starts two servers: the API on `127.0.0.1:8000`
-(`e2e/seed-layout.py` copies the repo DB to `/tmp/sp26-e2e.sqlite3` and seeds 7
-clusters so no initial t-SNE runs) and `npm run dev` on `localhost:5174`. Set
-`baseURL: http://localhost:5174` in tests (already configured). Screenshots go to
-`e2e/screenshots/` (gitignored).
+(`fe-visualizer/e2e/seed-layout.py` copies the repo DB to `/tmp/sp26-e2e.sqlite3`
+and seeds 7 clusters so no initial t-SNE runs) and `npm run dev` on
+`localhost:5174`. Set `baseURL: http://localhost:5174` in tests (already
+configured). Screenshots go to `fe-visualizer/e2e/screenshots/` (gitignored).
 
 ### Phone / LAN manual test
 
@@ -415,5 +423,5 @@ mirroring the deployed topology. Open `http://<lan-ip>:3001` on the phone.
   after adding any dependency, run `npm run check:lock` (from `fe-visualizer/`)
   before building the image; it reproduces the container step with the exact npm
   version and is non-destructive (`--dry-run`).
-- **Screenshots change on every run** — `e2e/screenshots/` is gitignored; never
-  commit them.
+- **Screenshots change on every run** — `fe-visualizer/e2e/screenshots/` is
+  gitignored; never commit them.
