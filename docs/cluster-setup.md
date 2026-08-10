@@ -86,7 +86,7 @@ rewrite they would serve their `location = /` health response as a non-HTML body
 browser would download it. Both deployments therefore use the path-agnostic
 `visualizer-*` image, built from `fe-visualizer/Dockerfile` with `VITE_BASE_PATH=./`
 by `publish-dockerhub.yml` on `main` and `publish-dockerhub-test.yml` on the
-`feat/sp26-test-env` branch.
+`test` branch.
 
 ## TLS
 
@@ -114,7 +114,7 @@ TLS is host-level and shared — there is no per-namespace certificate.
 - `publish-dockerhub.yml` builds the `api-minimal-*`, `visualizer-minimal-*`
   (path-locked) and `visualizer-*` (path-agnostic) tags (minor + version + sha);
   `publish-dockerhub-test.yml` builds the same `api-minimal-*` / `visualizer-*`
-  families (version + sha) from the `feat/sp26-test-env` branch. Both environments
+  families (version + sha) from the `test` branch. Both environments
   use the same tag naming.
 
 ## Data
