@@ -202,7 +202,9 @@ reached through `request()` in `src/api.ts`.
   `VITE_ENABLE_SONG_DL_AND_EMBEDINGS` — **keep both flags aligned** or "Add a
   track" / "My songs" silently disappear.
 - **CORS**: `STREETPARADE_CORS_ORIGINS` (comma list) + optional
-  `STREETPARADE_CORS_ORIGIN_REGEX` (used for LAN phone testing).
+  `STREETPARADE_CORS_ORIGIN_REGEX`. The Helm deployments are same-origin behind
+  ingress and leave the regex disabled; LAN phone testing can use the local
+  private-network regex default.
 
 ### Endpoint surface the visualizer uses (base path `/api` in prod)
 
@@ -302,10 +304,10 @@ All commands run from `fe-visualizer/` unless noted.
 
 ```bash
 npm run typecheck      # tsc --noEmit (strict)
-npm run test:run       # vitest run (layoutOptions, search, selection, tooltipPosition)
+npm run test:run       # vitest run (unit tests; Playwright e2e is excluded)
 ```
 
-Expected: typecheck clean, 16/16 unit tests.
+Expected: typecheck clean, 21/21 unit tests.
 
 ### Dev server
 

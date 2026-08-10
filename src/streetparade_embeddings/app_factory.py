@@ -21,10 +21,11 @@ def cors_origins() -> list[str]:
 
 def cors_origin_regex() -> str | None:
     """Return the optional CORS origin regex for local network frontends."""
-    return os.environ.get(
+    raw = os.environ.get(
         "STREETPARADE_CORS_ORIGIN_REGEX",
         r"https?://(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?",
     )
+    return raw.strip() or None
 
 
 def create_app(lifespan: Callable[[FastAPI], AsyncIterator[None]] | None = None) -> FastAPI:
