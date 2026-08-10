@@ -7,7 +7,7 @@ async function visibleClusterCount(clusterSelect) {
   return (await clusterSelect.locator('option').count()) - 1;
 }
 
-test('recomputed PCA/tSNE layout updates the cluster count and colors in the UI', async ({ page }) => {
+test('recomputed PCA/tSNE layout updates the cluster count and colors in the UI', async ({ page, request }) => {
   test.setTimeout(300_000);
 
   await page.goto('/');
@@ -25,12 +25,6 @@ test('recomputed PCA/tSNE layout updates the cluster count and colors in the UI'
   // Baseline: the pre-seeded anonymous layout exposes SEED_CLUSTERS clusters.
   await expect.poll(() => visibleClusterCount(clusterSelect)).toBe(SEED_CLUSTERS);
 
-  // Capture the visualization reload triggered once the layout job completes.
-  const reloaded = page.waitForResponse(
-    (response) => response.url().includes('/visualization?') && response.request().method() === 'GET',
-    { timeout: 240_000 },
-  );
-
   // Configure the recompute with a specific cluster count.
   await page.getByRole('button', { name: 'Configure and recompute' }).click();
   const spectralClustering = page.locator('details').filter({ hasText: 'Spectral clustering' });
@@ -39,10 +33,11 @@ test('recomputed PCA/tSNE layout updates the cluster count and colors in the UI'
   await page.getByRole('button', { name: 'Recompute t-SNE map' }).click();
 
   // The recomputed layout is served by the refreshed visualization payload.
-  const response = await reloaded;
-  const payload = await response.json();
-  const clusterValues = new Set(payload.points.map((point) => point.cluster));
-  expect(clusterValues.size, 'refreshed /visualization must contain exactly the requested clusters').toBe(REQUESTED_CLUSTERS);
+  await expect.poll(async () => {
+    const response = await request.get('http://127.0.0.1:8000/visualization?username=e2e-tester');
+    const payload = await response.json();
+    return new Set(payload.points.map((point) => point.cluster)).size;
+  }, { timeout: 240_000 }).toBe(REQUESTED_CLUSTERS);
 
   // The cluster dropdown must reflect the requested count.
   await expect.poll(() => visibleClusterCount(clusterSelect)).toBe(REQUESTED_CLUSTERS);

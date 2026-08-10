@@ -26,8 +26,9 @@ pull secret attached via `imagePullSecrets`. `pullPolicy: Always`.
 | `deploy/helm/sp26-emb`      | —                   | —               | —                              | legacy path-locked chart, not deployed |
 
 The charts render `api-deployment.yaml` (SQLite + NumPy vector store on a PVC at
-`/data`, `/health` probe) and `visualizer-deployment.yaml` (nginx on :80, `/`
-probe, optional api-proxy sidecar). Ingresess: `<release>-navigator-ui`,
+`/data`, `/ready` readiness + `/health` liveness probes) and
+`visualizer-deployment.yaml` (nginx on :80, `/` probe, optional api-proxy
+sidecar). Ingresess: `<release>-navigator-ui`,
 `<release>-navigator-api`, `<release>-navigator-ui-redirect`.
 
 ### Image tag naming (must match the committed workflows exactly)
@@ -124,6 +125,7 @@ kubectl get pods -n sp26-test
 # curl the public endpoints (should return HTML / JSON, not a raw "ok" body)
 curl -sS https://magarathea.ddns.net/streetparade-navigator-2026/ | head -c 200
 curl -sS https://magarathea.ddns.net/streetparade-navigator-2026/api/health
+curl -sS https://magarathea.ddns.net/streetparade-navigator-2026/api/ready
 curl -sS 'https://magarathea.ddns.net/streetparade-navigator-2026/api/visualization?username=demo'
 curl -sS https://magarathea.ddns.net/sp26-test/
 ```

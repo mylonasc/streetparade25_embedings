@@ -21,7 +21,7 @@ api:
     STREETPARADE_NUMPY_VECTOR_DIR: /data/vectorstore
     ENABLE_SONG_DL_AND_EMBEDINGS: "0"
     STREETPARADE_CORS_ORIGINS: ""
-    STREETPARADE_CORS_ORIGIN_REGEX: "https?://.*"
+    STREETPARADE_CORS_ORIGIN_REGEX: ""
   resources:
     requests:
       cpu: 100m
