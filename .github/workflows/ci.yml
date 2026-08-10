@@ -213,13 +213,15 @@ jobs:
           server {
             listen 80;
             location ~ ^/streetparade-navigator-2026/api(/|$)(.*)$ {
-              proxy_pass http://api:8000/$2;
+              rewrite ^/streetparade-navigator-2026/api/?(.*)$ /$1 break;
+              proxy_pass http://api:8000;
             }
             location = /streetparade-navigator-2026 {
               return 308 /streetparade-navigator-2026/;
             }
             location ~ ^/streetparade-navigator-2026/(.*)$ {
-              proxy_pass http://visualizer:80/$1;
+              rewrite ^/streetparade-navigator-2026/?(.*)$ /$1 break;
+              proxy_pass http://visualizer:80;
             }
           }
           NGINX
