@@ -380,7 +380,7 @@ mirroring the deployed topology. Open `http://<lan-ip>:3001` on the phone.
 - When you change frontend code that should reach the deployed sites: the prod
   `visualizer-*` image is built by `publish-dockerhub.yml` after CI on `main` (or
   manual `workflow_dispatch`); the test `visualizer-<version>-<sha>` image is
-  built by `publish-dockerhub-test.yml` on push to branch `feat/sp26-test-env`
+  built by `publish-dockerhub-test.yml` on push to branch `test`
   (or manual `workflow_dispatch`); then bump the chart version + image tag and
   `helm upgrade` per `docs/cluster-setup.md`.
 

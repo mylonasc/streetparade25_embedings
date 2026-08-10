@@ -8,7 +8,7 @@ testing before releases; it does not touch the live deployment in
 
 It uses the same image tag naming as prod — `visualizer-*` (path-agnostic) and
 `api-minimal-*` — published by `publish-dockerhub-test.yml` from the
-`feat/sp26-test-env` branch (or by `publish-dockerhub.yml` from `main`).
+`test` branch (or by `publish-dockerhub.yml` from `main`).
 
 It deploys:
 

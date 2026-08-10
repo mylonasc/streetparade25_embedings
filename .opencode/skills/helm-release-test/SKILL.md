@@ -59,12 +59,12 @@ image.
 |----------|----------|------|
 | `CI` | push to `main` + pull_request; skipped (via `paths-ignore`) when only `docs/**`, `deploy/**`, `.opencode/**`, `site/**` or `*.md` change; `concurrency` cancels superseded runs | backend pytest, media fixture tests, fe-admin build, fe-visualizer `npm run test:run` + default build, docker smoke tests (Buildx with GHA layer cache). **Never pushes images or deploys.** |
 | `publish-dockerhub.yml` | `workflow_run` of CI **on `main`** (success) OR `workflow_dispatch` | builds+pushes `api-minimal-*`, `visualizer-minimal-*` (locked), `visualizer-*` (path-agnostic). env `dockerhub-push`. |
-| `publish-dockerhub-test.yml` | push to branch `feat/sp26-test-env` with paths `fe-visualizer/**`, `src/**`, `Dockerfile`, or the workflow file itself; OR `workflow_dispatch` | builds+pushes `api-minimal-<version>[-<sha>]`, `visualizer-<version>[-<sha>]`. |
+| `publish-dockerhub-test.yml` | push to branch `test` with paths `fe-visualizer/**`, `src/**`, `Dockerfile`, or the workflow file itself; OR `workflow_dispatch` | builds+pushes `api-minimal-<version>[-<sha>]`, `visualizer-<version>[-<sha>]`. |
 | `deploy-embedding-visualization.yml` | push to `main` OR `workflow_dispatch` | **GitHub Pages static site** (from release asset `embedding-visualization-data-v1`). Unrelated to the Docker/Helm deployment. |
 
 **No workflow deploys to the cluster.** Every Helm release is applied manually
-with `helm upgrade`. Neither the CI on a feature branch nor pushing to
-`feat/sp26-test-env` deploys anything by itself.
+with `helm upgrade`. Neither the CI on a feature branch nor pushing to `test`
+deploys anything by itself.
 
 ### Version sources
 
@@ -145,9 +145,9 @@ gh run view <run-id> --log-failed
 - **Prod images on demand**: `gh workflow run publish-dockerhub.yml --ref <branch>`.
   On `workflow_dispatch`, `SOURCE_SHA` is the branch HEAD, so versions are read
   from that branch. The workflow_run path (CI success on `main`) is automatic.
-- **Test images on demand**: `gh workflow run "Publish Test DockerHub Images" --ref feat/sp26-test-env`.
+- **Test images on demand**: `gh workflow run "Publish Test DockerHub Images" --ref test`.
   On a real push, only changes under the workflow's `paths` trigger a build —
-  pushing only chart files to `feat/sp26-test-env` will **not** rebuild images.
+  pushing only chart files to `test` will **not** rebuild images.
 - **Pages site**: `gh workflow run deploy-embedding-visualization.yml`.
 - The publish workflows run in the `dockerhub-push` **environment** — a run
   failing at "Check DockerHub configuration" means `DOCKERHUB_REPOSITORY`
