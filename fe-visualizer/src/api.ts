@@ -2,19 +2,45 @@ import type {PreferenceTarget} from './types';
 
 export const API_BASE_URL = resolveApiBaseUrl();
 
+type ApiBaseUrlInput = {
+  configured?: string;
+  location?: Pick<Location, 'hostname' | 'pathname' | 'protocol'>;
+  moduleUrl?: string;
+};
+
 export function resolveApiBaseUrl(): string {
-  const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  if (typeof window === 'undefined') return (configured || 'http://localhost:8000').replace(/\/$/, '');
-  const browserHost = window.location.hostname;
+  return resolveApiBaseUrlFor({
+    configured: import.meta.env.VITE_API_BASE_URL as string | undefined,
+    location: typeof window === 'undefined' ? undefined : window.location,
+    moduleUrl: import.meta.url,
+  });
+}
+
+export function resolveApiBaseUrlFor({configured, location, moduleUrl}: ApiBaseUrlInput): string {
+  if (!location) return (configured || 'http://localhost:8000').replace(/\/$/, '');
+  const browserHost = location.hostname;
   if (isLoopbackHost(browserHost)) {
     if (configured) return configured.replace(/\/$/, '');
-    return `${window.location.protocol}//${browserHost}:8000`;
+    return `${location.protocol}//${browserHost}:8000`;
   }
   if (configured && !isLoopbackUrl(configured)) {
     return configured.replace(/\/$/, '');
   }
-  const pathname = window.location.pathname.replace(/\/+$/, '');
+  const pathname = resolveDeployedBasePath(moduleUrl, location.pathname);
   return `${pathname}/api`;
+}
+
+function resolveDeployedBasePath(moduleUrl: string | undefined, pathname: string): string {
+  if (moduleUrl) {
+    try {
+      const modulePath = new URL(moduleUrl).pathname;
+      const assetsIndex = modulePath.indexOf('/assets/');
+      if (assetsIndex >= 0) return modulePath.slice(0, assetsIndex).replace(/\/+$/, '');
+    } catch {
+      // Fall through to the current path when the module URL is not absolute.
+    }
+  }
+  return pathname.replace(/\/+$/, '');
 }
 
 function isLoopbackUrl(value: string): boolean {

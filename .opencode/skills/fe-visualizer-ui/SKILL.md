@@ -362,7 +362,7 @@ mirroring the deployed topology. Open `http://<lan-ip>:3001` on the phone.
 ## Build / deploy context
 
 - `fe-visualizer/Dockerfile` (node build → nginx runtime) takes args
-  `VITE_API_BASE_URL` (default empty), `VITE_BASE_PATH` (default `/`; the
+  `VITE_API_BASE_URL` (default empty), `VITE_BASE_PATH` (default `./`; the
   published path-agnostic image overrides to `./`), `VITE_ENABLE_SONG_DL_AND_EMBEDINGS`
   (default `false`).
 - Image tags on DockerHub `mylonasc/magarathea` (private repo, pulls need the
