@@ -186,30 +186,47 @@ jobs:
           assert get_vector_store().query_by_vector([1.0, 0.0], n_results=1) == []
           PY
 
-      - name: Build streetparade26 visualizer image
+      - name: Build path-agnostic visualizer image
         run: |
           docker buildx build --load \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            -f fe-visualizer/Dockerfile.streetparade26 \
-            -t streetparade26-visualizer-ci fe-visualizer
+            --build-arg VITE_BASE_PATH=./ \
+            -f fe-visualizer/Dockerfile \
+            -t streetparade-visualizer-ci fe-visualizer
 
       - name: Check nginx config
-        run: docker run --rm streetparade26-visualizer-ci nginx -t
+        run: docker run --rm streetparade-visualizer-ci nginx -t
 
-      - name: Smoke test /streetparade26/ container
+      - name: Smoke test path-agnostic visualizer container
         run: |
-          docker run -d --rm --name streetparade26-visualizer-ci -p 18080:80 streetparade26-visualizer-ci
-          trap 'docker stop streetparade26-visualizer-ci >/dev/null 2>&1 || true' EXIT
+          docker run -d --rm --name streetparade-visualizer-ci -p 18080:80 streetparade-visualizer-ci
+          trap 'docker stop streetparade-visualizer-ci >/dev/null 2>&1 || true' EXIT
           sleep 1
-          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/)" = "404"
-          curl -fsS http://127.0.0.1:18080/streetparade26/ | grep -q '/streetparade26/assets/'
+          curl -fsS http://127.0.0.1:18080/ | grep -q './assets/'
 
-      - name: Smoke test visualizer API proxy
+      - name: Smoke test visualizer behind ingress-style base path
         run: |
-          docker network create streetparade26-ci
-          trap 'docker rm -f streetparade26-visualizer-proxy-ci api >/dev/null 2>&1 || true; docker network rm streetparade26-ci >/dev/null 2>&1 || true' EXIT
-          docker run -d --rm --network streetparade26-ci --name api python:3.12-alpine sh -c "mkdir -p /tmp/www/health && printf ok > /tmp/www/health/index.html && cd /tmp/www && python -m http.server 8000"
-          docker run -d --rm --network streetparade26-ci --name streetparade26-visualizer-proxy-ci -p 18081:80 streetparade26-visualizer-ci
+          docker network create streetparade-visualizer-ci
+          mkdir -p /tmp/streetparade-visualizer-ci
+          cat > /tmp/streetparade-visualizer-ci/default.conf <<'NGINX'
+          server {
+            listen 80;
+            location ~ ^/streetparade-navigator-2026/api(/|$)(.*)$ {
+              proxy_pass http://api:8000/$2;
+            }
+            location = /streetparade-navigator-2026 {
+              return 308 /streetparade-navigator-2026/;
+            }
+            location ~ ^/streetparade-navigator-2026/(.*)$ {
+              proxy_pass http://visualizer:80/$1;
+            }
+          }
+          NGINX
+          trap 'docker rm -f streetparade-visualizer-proxy-ci visualizer api >/dev/null 2>&1 || true; docker network rm streetparade-visualizer-ci >/dev/null 2>&1 || true' EXIT
+          docker run -d --rm --network streetparade-visualizer-ci --name api python:3.12-alpine sh -c "mkdir -p /tmp/www/health && printf ok > /tmp/www/health/index.html && cd /tmp/www && python -m http.server 8000"
+          docker run -d --rm --network streetparade-visualizer-ci --name visualizer streetparade-visualizer-ci
+          docker run -d --rm --network streetparade-visualizer-ci --name streetparade-visualizer-proxy-ci -p 18081:80 -v /tmp/streetparade-visualizer-ci/default.conf:/etc/nginx/conf.d/default.conf:ro nginx:1.27-alpine
           sleep 2
-          test "$(curl -fsS http://127.0.0.1:18081/streetparade26/api/health/)" = "ok"
+          curl -fsS http://127.0.0.1:18081/streetparade-navigator-2026/ | grep -q './assets/'
+          test "$(curl -fsS http://127.0.0.1:18081/streetparade-navigator-2026/api/health/)" = "ok"

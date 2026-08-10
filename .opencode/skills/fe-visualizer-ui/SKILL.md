@@ -161,7 +161,9 @@ Add new modals to `Modals.tsx` and render them at the end of `App.tsx`'s JSX.
 `resolveApiBaseUrl()` in `src/api.ts`:
 - Loopback host (localhost/127.0.0.1) → `http://<host>:8000` unless
   `VITE_API_BASE_URL` is set.
-- Any other host → **`location.pathname + '/api'`** at runtime.
+- Any other host → deployed base path + `/api` at runtime. The deployed base is
+  derived from the loaded `/assets/...` module URL when available, so deep links
+  do not accidentally become part of the API prefix.
 
 This is why **one image works at any base path** (`/streetparade-navigator-2026/`,
 `/sp26-test/`, LAN phone test). Consequences:
@@ -200,7 +202,9 @@ reached through `request()` in `src/api.ts`.
   `VITE_ENABLE_SONG_DL_AND_EMBEDINGS` — **keep both flags aligned** or "Add a
   track" / "My songs" silently disappear.
 - **CORS**: `STREETPARADE_CORS_ORIGINS` (comma list) + optional
-  `STREETPARADE_CORS_ORIGIN_REGEX` (used for LAN phone testing).
+  `STREETPARADE_CORS_ORIGIN_REGEX`. The Helm deployments are same-origin behind
+  ingress and leave the regex disabled; LAN phone testing can use the local
+  private-network regex default.
 
 ### Endpoint surface the visualizer uses (base path `/api` in prod)
 
@@ -285,7 +289,7 @@ fields) must invalidate that cache.
 4. Add markup + a dedicated class(es) in `styles.css`; follow the breakpoint and
    z-index rules above.
 5. If you add a flex/grid row whose children must not overlap, add its selector
-   to `OVERLAP_GROUPS` in `e2e/streetparade-quality.spec.js`.
+   to `OVERLAP_GROUPS` in `fe-visualizer/e2e/streetparade-quality.spec.js`.
 6. Add `aria-*` labels for every new button/control.
 7. Verify: typecheck → unit tests → e2e (below). If behavior is mobile-specific,
    run the mobile spec too.
@@ -300,10 +304,10 @@ All commands run from `fe-visualizer/` unless noted.
 
 ```bash
 npm run typecheck      # tsc --noEmit (strict)
-npm run test:run       # vitest run (layoutOptions, search, selection, tooltipPosition)
+npm run test:run       # vitest run (unit tests; Playwright e2e is excluded)
 ```
 
-Expected: typecheck clean, 16/16 unit tests.
+Expected: typecheck clean, 21/21 unit tests.
 
 ### Dev server
 
@@ -321,7 +325,7 @@ STREETPARADE_NUMPY_VECTOR_DIR=$PWD/vectorstore ENABLE_SONG_DL_AND_EMBEDINGS=0 \
 .venv/bin/python -m uvicorn streetparade_embeddings.api:app --port 8000
 ```
 
-### Playwright e2e (repo `e2e/`)
+### Playwright e2e (`fe-visualizer/e2e/`)
 
 Three specs, 10 tests total, all must pass:
 - `streetparade-quality.spec.js` — one test × 5 devices (Pixel 7/10, iPhone SE/13/16):
@@ -334,21 +338,23 @@ Three specs, 10 tests total, all must pass:
 - `streetparade-layout.spec.js` — recompute flow: 7 seeded clusters → request 5 →
   assert `/visualization` has exactly 5 distinct clusters and the UI dropdown matches.
 
-Prerequisites: backend deps in repo `.venv`; `cd e2e && npm install` and
+Prerequisites: backend deps in repo `.venv`; `cd fe-visualizer/e2e && npm install` and
 `npx playwright install chromium`.
 
 ```bash
-cd e2e
+cd fe-visualizer/e2e
 npx playwright test                 # all specs
 npx playwright test streetparade-mobile.spec.js   # subset
 npx playwright test --headed        # watch the browser
 ```
 
+From `fe-visualizer/` you can also run the suite with `npm run test:e2e`.
+
 `playwright.config.js` auto-starts two servers: the API on `127.0.0.1:8000`
-(`e2e/seed-layout.py` copies the repo DB to `/tmp/sp26-e2e.sqlite3` and seeds 7
+(`fe-visualizer/e2e/seed-layout.py` copies the repo DB to `/tmp/sp26-e2e.sqlite3` and seeds 7
 clusters so no initial t-SNE runs) and `npm run dev` on `localhost:5174`. Set
 `baseURL: http://localhost:5174` in tests (already configured). Screenshots go to
-`e2e/screenshots/` (gitignored).
+`fe-visualizer/e2e/screenshots/` (gitignored).
 
 ### Phone / LAN manual test
 
@@ -362,7 +368,7 @@ mirroring the deployed topology. Open `http://<lan-ip>:3001` on the phone.
 ## Build / deploy context
 
 - `fe-visualizer/Dockerfile` (node build → nginx runtime) takes args
-  `VITE_API_BASE_URL` (default empty), `VITE_BASE_PATH` (default `/`; the
+  `VITE_API_BASE_URL` (default empty), `VITE_BASE_PATH` (default `./`; the
   published path-agnostic image overrides to `./`), `VITE_ENABLE_SONG_DL_AND_EMBEDINGS`
   (default `false`).
 - Image tags on DockerHub `mylonasc/magarathea` (private repo, pulls need the
@@ -415,5 +421,5 @@ mirroring the deployed topology. Open `http://<lan-ip>:3001` on the phone.
   after adding any dependency, run `npm run check:lock` (from `fe-visualizer/`)
   before building the image; it reproduces the container step with the exact npm
   version and is non-destructive (`--dry-run`).
-- **Screenshots change on every run** — `e2e/screenshots/` is gitignored; never
+- **Screenshots change on every run** — `fe-visualizer/e2e/screenshots/` is gitignored; never
   commit them.

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e": "cd e2e && npx playwright test",
     "check:lock": "npx -y npm@10.9.8 ci --omit=dev --dry-run"
   },
   "dependencies": {

@@ -22,14 +22,14 @@ the visualization reads the anonymous scope) and passes after the fix.
 
 - Node + npm.
 - Playwright Chromium browser:
-  `cd e2e && npx playwright install chromium`
+  `cd fe-visualizer/e2e && npx playwright install chromium`
 - Backend deps already installed in the repo `.venv` (numpy, scikit-learn,
   uvicorn).
 
 ## Run
 
 ```bash
-cd e2e
+cd fe-visualizer/e2e
 npm install
 npx playwright test
 ```

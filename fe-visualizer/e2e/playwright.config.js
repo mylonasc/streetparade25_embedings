@@ -1,15 +1,15 @@
 const path = require('node:path');
 
-const repoRoot = path.resolve(__dirname, '..');
-const python = path.join(repoRoot, '.venv', 'bin', 'python');
+const repoRoot = path.resolve(__dirname, '..', '..');
+const python = process.env.PYTHON || path.join(repoRoot, '.venv', 'bin', 'python');
 const frontendDir = path.join(repoRoot, 'fe-visualizer');
-const seedScript = path.join(repoRoot, 'e2e', 'seed-layout.py');
+const seedScript = path.join(__dirname, 'seed-layout.py');
 const sourceDb = path.join(repoRoot, 'streetparade_embeddings.sqlite3');
 const runtimeDb = '/tmp/sp26-e2e.sqlite3';
 const numpyDir = path.join(repoRoot, 'vectorstore');
 
 module.exports = {
-  testDir: '.',
+  testDir: __dirname,
   timeout: 300_000,
   expect: {
     timeout: 60_000,
